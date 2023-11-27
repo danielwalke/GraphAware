@@ -31,7 +31,8 @@ class Filter:
                                                           "TargetIcu.str.contains('MICU')))",
                                                                                            engine='python')
         self.data = sirs_complete_first_non_icu_unique_data
-        self.data['Label'] = self.data['Diagnosis']
+        self.data = self.data.assign(Label=self.data['Diagnosis'])
+        # self.data['Label'] = self.data['Diagnosis']
 
         control_filter = (self.data["Diagnosis"] == 'Control') | \
                          ((self.data["SecToIcu"] > 3600 * 6) & (
@@ -40,11 +41,13 @@ class Filter:
         sepsis_filter = (self.data["Diagnosis"] == 'Sepsis') & \
                         (self.data["SecToIcu"] <= 3600 * 6) & \
                         (self.data["TargetIcu"].str.contains('MICU', na=False))
-        self.data.loc[control_filter, "Label"] = "Control"
-        self.data.loc[sepsis_filter, "Label"] = "Sepsis"
+        self.data['Label'].mask(control_filter, "Control", inplace=True)
+        self.data['Label'].mask(sepsis_filter, "Sepsis", inplace=True)
+        # self.data.loc[control_filter, "Label"] = "Control"
+        # self.data.loc[sepsis_filter, "Label"] = "Sepsis"
 
-        self.control_data = self.data.loc[control_filter]
-        self.sepsis_data = self.data.loc[sepsis_filter]
+        self.control_data = self.data.loc[control_filter, :]
+        self.sepsis_data = self.data.loc[sepsis_filter, :]
         self.resample_data() 
 
     def get_control_data(self):

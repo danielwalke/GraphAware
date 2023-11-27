@@ -65,7 +65,6 @@ class Framework:
         for hop_idx in range(len(self.hops_list)):
             neighbor_features = self.aggregate(X, edge_index, hop_idx, is_training)
             aggregated_train_features_list.append(neighbor_features[mask])
-        
         return aggregated_train_features_list
 
 
