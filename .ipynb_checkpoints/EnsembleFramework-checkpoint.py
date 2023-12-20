@@ -42,9 +42,9 @@ class Framework:
             raise Exception(f"Only the following string values are valid inputs for the user function: {[key for key in USER_FUNCTIONS]}. You can also specify your own function for aggregatioon.")
             
     def get_features(self,
-                     X:torch.FloatTensor|numpy._typing.NDArray,
-                     edge_index:torch.LongTensor|numpy._typing.NDArray,
-                     mask:torch.BoolTensor|numpy._typing.NDArray,
+                     X:torch.FloatTensor,
+                     edge_index:torch.LongTensor,
+                     mask:torch.BoolTensor,
                     is_training:bool = False) -> tuple[torch.FloatTensor, torch.FloatTensor]:
         if mask is None:
             mask = torch.ones(X.shape[0]).type(torch.bool)
@@ -149,10 +149,10 @@ class Framework:
         return source_lift
     
     def fit(self,
-            X_train:torch.FloatTensor|numpy._typing.NDArray,
-            edge_index:torch.LongTensor|numpy._typing.NDArray,
-            y_train:torch.LongTensor|numpy._typing.NDArray,
-            train_mask:torch.BoolTensor|numpy._typing.NDArray|None,
+            X_train:torch.FloatTensor,
+            edge_index:torch.LongTensor,
+            y_train:torch.LongTensor,
+            train_mask:torch.BoolTensor|None,
             kwargs_fit_list = None,
             transform_kwargs_fit = None,
             kwargs_multi_clf_list = None
@@ -180,9 +180,9 @@ class Framework:
         self.trained_clfs = trained_clfs
         return trained_clfs    
     
-    def predict_proba(self, X_test:torch.FloatTensor|numpy._typing.NDArray,
-                      edge_index:torch.LongTensor|numpy._typing.NDArray,
-                      test_mask:torch.BoolTensor|numpy._typing.NDArray|None,
+    def predict_proba(self, X_test:torch.FloatTensor,
+                      edge_index:torch.LongTensor,
+                      test_mask:torch.BoolTensor|None,
                       weights=None,
                      kwargs_list = None):  
         if test_mask is None:
@@ -200,9 +200,9 @@ class Framework:
         
     
     def predict(self,
-                X_test:torch.FloatTensor|numpy._typing.NDArray,
-                edge_index:torch.LongTensor|numpy._typing.NDArray,
-                test_mask:torch.BoolTensor|numpy._typing.NDArray|None,
+                X_test:torch.FloatTensor,
+                edge_index:torch.LongTensor,
+                test_mask:torch.BoolTensor|None,
                  weights=None,
                      kwargs_list = None):
         return self.predict_proba(X_test, edge_index, test_mask, weights, kwargs_list).argmax(1)
@@ -212,7 +212,7 @@ class Framework:
         pass
             
     @staticmethod
-    def get_feature_tensor(X:torch.FloatTensor|numpy._typing.NDArray) -> torch.FloatTensor|None:
+    def get_feature_tensor(X:torch.FloatTensor) -> torch.FloatTensor|None:
         if not torch.is_tensor(X):
             try:
                 return torch.from_numpy(X).type(torch.float)
@@ -222,7 +222,7 @@ class Framework:
         return X
     
     @staticmethod
-    def get_label_tensor(y:torch.LongTensor|numpy._typing.NDArray) -> torch.LongTensor|None:
+    def get_label_tensor(y:torch.LongTensor) -> torch.LongTensor|None:
         if not torch.is_tensor(y):
             try:
                 return torch.from_numpy(y).type(torch.long)
@@ -232,7 +232,7 @@ class Framework:
         return y
     
     @staticmethod
-    def get_mask_tensor(mask:torch.BoolTensor|numpy._typing.NDArray) -> torch.BoolTensor|None:
+    def get_mask_tensor(mask:torch.BoolTensor) -> torch.BoolTensor|None:
         if not torch.is_tensor(mask):
             try:
                 return torch.from_numpy(mask).type(torch.bool)
@@ -242,7 +242,7 @@ class Framework:
         return mask
             
     @staticmethod
-    def get_edge_index_tensor(edge_index:torch.LongTensor|numpy._typing.NDArray) -> torch.LongTensor|None:
+    def get_edge_index_tensor(edge_index:torch.LongTensor) -> torch.LongTensor|None:
         if not torch.is_tensor(edge_index):
             try:
                 edge_index =  torch.from_numpy(edge_index).type(torch.long)
