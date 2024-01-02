@@ -3,6 +3,7 @@ from sklearn.metrics import accuracy_score
 from tqdm.notebook import tqdm
 from EnsembleFramework import Framework
 from torch.nn.functional import normalize
+from sklearn.multioutput import MultiOutputClassifier
 
 DEF_ATTENTION_CONFIGS= [None,{'inter_layer_normalize': False,
                      'use_pseudo_attention':True,
@@ -57,16 +58,22 @@ class Data():
         self.X_test = X
 
 class SparkTune():
-    def __init__(self, data,clf, evals = 10):
+    def __init__(self, data,clf, evals = 10, pred_metric = accuracy_score, pred_metric_kwargs = {}, multi_target_class = False):
         self.evals = evals
         self.data = data
         self.clf = clf
+        self.pred_metric = pred_metric
+        self.pred_metric_kwargs = pred_metric_kwargs
+        self.multi_target_class = multi_target_class
         
     def objective(self, params):
         model = self.clf(**params)
+        if self.multi_target_class:
+            print("Multi class")
+            model = MultiOutputClassifier(model, n_jobs=11)
         model.fit(self.data.X_train, self.data.y[self.data.train])
         y_pred = model.predict(self.data.X_val)
-        score = accuracy_score(self.data.y[self.data.val], y_pred)
+        score = self.pred_metric(self.data.y[self.data.val], y_pred, **self.pred_metric_kwargs)
         return {'loss': -score, 'status': STATUS_OK}
     
     def search(self, space):
@@ -76,9 +83,12 @@ class SparkTune():
 
 
 class AutoSearch:
-    def __init__(self, data_dict, max_evals):
+    def __init__(self, data_dict, max_evals = 200, multi_target_class = False, pred_metric= accuracy_score, pred_metric_kwargs = {}):
         self.data_dict = data_dict
         self.max_evals = max_evals
+        self.multi_target_class = multi_target_class
+        self.pred_metric = pred_metric
+        self.pred_metric_kwargs = pred_metric_kwargs
 
     def get_data(self):
         dataset = self.data_dict
@@ -100,22 +110,25 @@ class AutoSearch:
         data.set_X_val(framework.get_features(data.X, data.edge_index, data.val)[0].cpu())
         data.set_X_test(framework.get_features(data.X, data.edge_index, data.test)[0].cpu())
         
-        sparkTune = SparkTune(data, clf, evals = self.max_evals)
+        sparkTune = SparkTune(data, clf, evals = self.max_evals, pred_metric = self.pred_metric, pred_metric_kwargs = self.pred_metric_kwargs,
+                             multi_target_class = self.multi_target_class)
         params = sparkTune.search(space)
         
         params = space_eval(space, params)
     
         model = clf(**params)
-        kwargs={"eval_set":[(data.X_val, data.y[data.val])], "early_stopping_rounds":5} if model.__class__.__name__ == 'XGBClassifier' else {}
-        
+        kwargs={}# {"eval_set":[(data.X_val, data.y[data.val])], "early_stopping_rounds":5} if model.__class__.__name__ == 'XGBClassifier' else {}
+        if self.multi_target_class:
+            print("Multi class")
+            model = MultiOutputClassifier(model, n_jobs=11)
         model.fit(data.X_train,data.y[data.train],**kwargs)
         train_pred = model.predict(data.X_train)
         val_pred = model.predict(data.X_val)
         test_pred = model.predict(data.X_test)
         
-        train_acc = accuracy_score(data.y[data.train], train_pred)
-        val_acc = accuracy_score(data.y[data.val], val_pred)
-        test_acc = accuracy_score(data.y[data.test], test_pred)
+        train_acc = self.pred_metric(data.y[data.train], train_pred, **self.pred_metric_kwargs)
+        val_acc = self.pred_metric(data.y[data.val], val_pred, **self.pred_metric_kwargs)
+        test_acc = self.pred_metric(data.y[data.test], test_pred, **self.pred_metric_kwargs)
         search_dict = dict({})
         search_dict["train_acc"] = train_acc
         search_dict["val_acc"] = val_acc

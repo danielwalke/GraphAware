@@ -5,6 +5,7 @@ import numpy as np
 import numpy
 from sklearn.base import clone
 from sklearn.model_selection import GridSearchCV
+from sklearn.multioutput import MultiOutputClassifier
 
 USER_FUNCTIONS = {
     'sum': lambda origin_features, updated_features, sum_neighbors, mul_neighbors, num_neighbors: sum_neighbors,
@@ -15,7 +16,7 @@ USER_FUNCTIONS = {
     'sum_of_updated_mean': lambda origin_features, updated_features, sum_neighbors, mul_neighbors, num_neighbors: updated_features + sum_neighbors / num_neighbors,
 }
 ## Assumption: the overall prediction perf improved when the performance of inidividual predictiors improves
-##TODO More input_validation, grid search method whoch accepts the same params
+##TODO More input_validation,Docu
 class Framework:    
     
     def __init__(self, user_functions, 
@@ -196,6 +197,8 @@ class Framework:
             pred_proba = clf.predict_proba(aggregated_test_features.cpu().numpy(),**kwargs) if kwargs else clf.predict_proba(aggregated_test_features.cpu().numpy())
             pred_probas.append(pred_proba)
         final_pred_proba = np.average(np.asarray(pred_probas), weights=weights, axis=0)
+        if self.multi_target_class:
+            return np.transpose(final_pred_proba, axes = [1,0,2])
         return final_pred_proba
         
     
@@ -205,7 +208,7 @@ class Framework:
                 test_mask:torch.BoolTensor|None,
                  weights=None,
                      kwargs_list = None):
-        return self.predict_proba(X_test, edge_index, test_mask, weights, kwargs_list).argmax(1)
+        return self.predict_proba(X_test, edge_index, test_mask, weights, kwargs_list).argmax(-1)
         
 
     def validate_input(self):
