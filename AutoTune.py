@@ -5,6 +5,7 @@ from EnsembleFramework import Framework
 from torch.nn.functional import normalize
 from sklearn.multioutput import MultiOutputClassifier
 
+    
 DEF_ATTENTION_CONFIGS= [None,{'inter_layer_normalize': False,
                      'use_pseudo_attention':True,
                      'cosine_eps':.01,
@@ -58,14 +59,13 @@ class Data():
         self.X_test = X
 
 class SparkTune():
-    def __init__(self, data,clf, evals = 10, pred_metric = accuracy_score, pred_metric_kwargs = {}, multi_target_class = False, is_transductive = True):
+    def __init__(self, data,clf, evals = 10, pred_metric = accuracy_score, pred_metric_kwargs = {}, multi_target_class = False):
         self.evals = evals
         self.data = data
         self.clf = clf
         self.pred_metric = pred_metric
         self.pred_metric_kwargs = pred_metric_kwargs
         self.multi_target_class = multi_target_class
-        self.is_transductive = is_transductive
         
     def objective(self, params):
         model = self.clf(**params)
@@ -122,6 +122,7 @@ class AutoSearch:
         if self.multi_target_class:
             print("Multi class")
             model = MultiOutputClassifier(model, n_jobs=11)
+        print(model)
         model.fit(data.X_train,data.y[data.train],**kwargs)
         train_pred = model.predict(data.X_train)
         val_pred = model.predict(data.X_val)

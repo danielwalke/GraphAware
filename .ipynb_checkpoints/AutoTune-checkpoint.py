@@ -5,6 +5,7 @@ from EnsembleFramework import Framework
 from torch.nn.functional import normalize
 from sklearn.multioutput import MultiOutputClassifier
 
+    
 DEF_ATTENTION_CONFIGS= [None,{'inter_layer_normalize': False,
                      'use_pseudo_attention':True,
                      'cosine_eps':.01,
@@ -121,6 +122,7 @@ class AutoSearch:
         if self.multi_target_class:
             print("Multi class")
             model = MultiOutputClassifier(model, n_jobs=11)
+        print(model)
         model.fit(data.X_train,data.y[data.train],**kwargs)
         train_pred = model.predict(data.X_train)
         val_pred = model.predict(data.X_val)
