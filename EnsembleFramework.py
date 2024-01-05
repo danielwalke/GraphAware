@@ -6,7 +6,9 @@ import numpy
 from sklearn.base import clone
 from sklearn.model_selection import GridSearchCV
 from sklearn.multioutput import MultiOutputClassifier
-
+import matplotlib.pyplot  as plt
+from sklearn.metrics import accuracy_score
+from sklearn.manifold import TSNE
 USER_FUNCTIONS = {
     'sum': lambda origin_features, updated_features, sum_neighbors, mul_neighbors, num_neighbors: sum_neighbors,
     'mean': lambda origin_features, updated_features, sum_neighbors, mul_neighbors, num_neighbors: sum_neighbors / num_neighbors,
@@ -15,6 +17,11 @@ USER_FUNCTIONS = {
     'sum_of_origin_mean': lambda origin_features, updated_features, sum_neighbors, mul_neighbors, num_neighbors: origin_features + sum_neighbors / num_neighbors,
     'sum_of_updated_mean': lambda origin_features, updated_features, sum_neighbors, mul_neighbors, num_neighbors: updated_features + sum_neighbors / num_neighbors,
 }
+
+def softmax(x):
+    e_coef = np.exp(x)
+    softmax_coef = e_coef / np.sum(e_coef)
+    return softmax_coef
 ## Assumption: the overall prediction perf improved when the performance of inidividual predictiors improves
 ##TODO More input_validation,Docu
 class Framework:    
@@ -25,7 +32,8 @@ class Framework:
                  multi_target_class:bool =False,
                  gpu_idx:int|None=None,
                  handle_nan:float|None=None,
-                attention_configs:list=[]) -> None:
+                attention_configs:list=[],
+                scoring_fun = accuracy_score) -> None:
         self.user_functions = user_functions
         self.hops_list:list[int] = hops_list
         self.clfs:list[int] = clfs
@@ -35,6 +43,10 @@ class Framework:
         self.attention_configs = attention_configs
         self.multi_target_class = multi_target_class
         self.device:torch.DeviceObjType = torch.device(f"cuda:{str(self.gpu_idx)}") if self.gpu_idx is not None and torch.cuda.is_available() else torch.device("cpu")
+        self.num_classes = None
+        self.dataset = None
+        self.scoring_fun = scoring_fun
+        self.multi_out = None
     
     def update_user_function(self):
         if self.user_function in USER_FUNCTIONS:
@@ -163,6 +175,9 @@ class Framework:
             
         y_train = Framework.get_label_tensor(y_train)
         y_train = y_train[train_mask]
+        self.num_classes = len(y_train.unique(return_counts = True)[0])
+        self.multi_out = y_train.shape[-1]
+        
         
         self.validate_input()
         
@@ -274,7 +289,69 @@ class Framework:
         if len(grid_params) != 2 and not self.use_feature_based_aggregation:
             raise Exception("You need to provide two grid parameter, one for each classifier!")
         return
+
+    def score(self, X,y, sample_weight = None):
+        if self.dataset is None: raise Exception("Dataset have to be set for calculating feature importance in non-tree-based or non-linear Classifiers")
+        self.scoring_fun(y[self.dataset["test"]], self.predict(X, self.dataset["edge_index"], self.dataset["test"]), sample_weight=sample_weight)
+        
+
+    def set_dataset(self, dataset):
+        self.dataset = dataset
+
+    def feature_importance_per_class(self, class_idx, n_repeats = 1):
+        framework = self
+        if self.multi_target_class:
+            is_tree_clfs = all([hasattr(framework.trained_clfs[0].estimators_[0], 'feature_importances_') for i in range(len(framework.trained_clfs))])
+            is_linear_clfs = all([hasattr(framework.trained_clfs[0].estimators_[0], 'coef_')  for i in range(len(framework.trained_clfs))])
+            if is_tree_clfs:
+                return np.mean([framework.trained_clfs[i].estimators_[class_idx].feature_importances_ for i in range(len(framework.trained_clfs))], axis = 0)
+            elif is_linear_clfs:
+                return np.mean([softmax(np.abs(framework.trained_clfs[i].estimators_[class_idx].coef_)) for i in range(len(framework.trained_clfs))], axis = 0)
+            else:
+                return permutation_importance(self, dataset["X"], dataset["y"],
+                            n_repeats=n_repeats,
+                          random_state=0)["importances_mean"]
+        if not self.multi_target_class:
+            is_tree_clfs = all([hasattr(framework.trained_clfs[i], "feature_importances_") for i in range(len(framework.trained_clfs))])
+            is_linear_clfs = all([hasattr(framework.trained_clfs[i], "coef_") for i in range(len(framework.trained_clfs))])
+            if is_tree_clfs:
+                return np.mean([framework.trained_clfs[i].feature_importances_[class_idx] for i in range(len(framework.trained_clfs))], axis = 0)
+            elif is_linear_clfs:
+                return np.mean([softmax(np.abs(framework.trained_clfs[i].coef_[class_idx])) for i in range(len(framework.trained_clfs))], axis = 0)
+            else:
+                return permutation_importance(self, dataset["X"], dataset["y"],
+                            n_repeats=n_repeats,
+                          random_state=0)["importances_mean"]
     
-    def hyper_param_tuning(spaces, objectives, n_iter, X_train, y_train, X_val, y_val):
-        ## bayes optim
-        pass
+    def feature_importance(self):
+        num_classes = self.num_classes if not self.multi_target_class else self.multi_out
+        if not num_classes: raise Exception("Not fitted yet")
+        return np.mean([self.feature_importance_per_class(i) for i in range(num_classes)], axis = 0)
+
+    def plot_feature_importances(self, mark_top_n_peaks = 3, which_grid = "both"):
+        y = self.feature_importance()
+        x = np.arange(y.shape[0])
+        peaks_idx = y.argsort()[::-1][:mark_top_n_peaks]
+        plt.plot(x,y)
+        plt.scatter(x[peaks_idx], y[peaks_idx], c='red', marker='o')
+        for i, peak in enumerate(peaks_idx):
+            plt.annotate(f'{x[peak]:.0f}', (x[peak], y[peak]), textcoords="offset points", xytext=(0,10), ha='center')
+        if which_grid:
+            plt.grid(visible=True, which=which_grid)
+        plt.show()
+
+    def plot_tsne(self, X, edge_index, y, mask = None):
+        mask = torch.ones(X.shape[0]).type(torch.bool) if mask is None else mask
+        scores = self.predict_proba(X, edge_index, mask)
+        node_labels = y[mask].cpu().numpy()
+        if self.multi_target_class: raise Exception("Currently not supported for multi class prediction")
+
+        num_classes = self.num_classes         
+        t_sne_embeddings = TSNE(n_components=2, perplexity=30, method='barnes_hut').fit_transform(scores)
+        
+        fig = plt.figure(figsize=(12,8), dpi=80)  # otherwise plots are really small in Jupyter Notebook
+        label_to_color_map = {i: (np.random.random(), np.random.random(), np.random.random()) for i in range(num_classes)} 
+        for class_id in range(num_classes):
+            plt.scatter(t_sne_embeddings[node_labels == class_id, 0], t_sne_embeddings[node_labels == class_id, 1], s=20, color=label_to_color_map[class_id], edgecolors='black', linewidths=0.2)
+        plt.legend(label_to_color_map.keys())
+        plt.show()
