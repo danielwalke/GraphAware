@@ -9,6 +9,7 @@ from sklearn.multioutput import MultiOutputClassifier
 import matplotlib.pyplot  as plt
 from sklearn.metrics import accuracy_score
 from sklearn.manifold import TSNE
+from sklearn.inspection import PartialDependenceDisplay
 USER_FUNCTIONS = {
     'sum': lambda origin_features, updated_features, sum_neighbors, mul_neighbors, num_neighbors: sum_neighbors,
     'mean': lambda origin_features, updated_features, sum_neighbors, mul_neighbors, num_neighbors: sum_neighbors / num_neighbors,
@@ -328,19 +329,22 @@ class Framework:
         if not num_classes: raise Exception("Not fitted yet")
         return np.mean([self.feature_importance_per_class(i) for i in range(num_classes)], axis = 0)
 
-    def plot_feature_importances(self, mark_top_n_peaks = 3, which_grid = "both"):
+    def plot_feature_importances(self, mark_top_n_peaks = 3, which_grid = "both", file_name = None):
         y = self.feature_importance()
         x = np.arange(y.shape[0])
         peaks_idx = y.argsort()[::-1][:mark_top_n_peaks]
-        plt.plot(x,y)
+        plt.bar(x,y)
+        plt.ylabel("Relative Importance")
+        plt.xlabel("Features")
         plt.scatter(x[peaks_idx], y[peaks_idx], c='red', marker='o')
         for i, peak in enumerate(peaks_idx):
             plt.annotate(f'{x[peak]:.0f}', (x[peak], y[peak]), textcoords="offset points", xytext=(0,10), ha='center')
         if which_grid:
             plt.grid(visible=True, which=which_grid)
         plt.show()
+        if file_name: plt.savefig(f"{file_name}.png")
 
-    def plot_tsne(self, X, edge_index, y, mask = None):
+    def plot_tsne(self, X, edge_index, y, mask = None, label_to_color_map = None):
         mask = torch.ones(X.shape[0]).type(torch.bool) if mask is None else mask
         scores = self.predict_proba(X, edge_index, mask)
         node_labels = y[mask].cpu().numpy()
@@ -350,7 +354,7 @@ class Framework:
         t_sne_embeddings = TSNE(n_components=2, perplexity=30, method='barnes_hut').fit_transform(scores)
         
         fig = plt.figure(figsize=(12,8), dpi=80)  # otherwise plots are really small in Jupyter Notebook
-        label_to_color_map = {i: (np.random.random(), np.random.random(), np.random.random()) for i in range(num_classes)} 
+        label_to_color_map = {i: (np.random.random(), np.random.random(), np.random.random()) for i in range(num_classes)} if label_to_color_map is None else label_to_color_map
         for class_id in range(num_classes):
             plt.scatter(t_sne_embeddings[node_labels == class_id, 0], t_sne_embeddings[node_labels == class_id, 1], s=20, color=label_to_color_map[class_id], edgecolors='black', linewidths=0.2)
         plt.legend(label_to_color_map.keys())
