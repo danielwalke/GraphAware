@@ -10,17 +10,21 @@ import torch
 
 def upd_user_function(kwargs):
     return  nn.functional.normalize(kwargs["updated_features"] + kwargs["summed_neighbors"], p = 2.0, dim = -1)
-DEF_ATTENTION_CONFIGS= [None,{'inter_layer_normalize': False,
+# DEF_ATTENTION_CONFIGS= [None,{'inter_layer_normalize': False,
+#                      'use_pseudo_attention':True,
+#                      'cosine_eps':.01,
+#                      'dropout_attn': None}, 
+#                      {'inter_layer_normalize': True,
+#                      'use_pseudo_attention':True,
+#                      'cosine_eps':.01,
+#                      'dropout_attn': None},
+#                      {'inter_layer_normalize': True,
+#                      'use_pseudo_attention':True,
+#                      'cosine_eps':.001,
+#                      'dropout_attn': None}]
+DEF_ATTENTION_CONFIGS= [{'inter_layer_normalize': False,
                      'use_pseudo_attention':True,
                      'cosine_eps':.01,
-                     'dropout_attn': None}, 
-                     {'inter_layer_normalize': True,
-                     'use_pseudo_attention':True,
-                     'cosine_eps':.01,
-                     'dropout_attn': None},
-                     {'inter_layer_normalize': True,
-                     'use_pseudo_attention':True,
-                     'cosine_eps':.001,
                      'dropout_attn': None}]
 DEF_HOPS = [3, 5]
 DEF_MAX_EVALS = 1000
@@ -30,7 +34,7 @@ def norm_user_function(kwargs):
 def user_function(kwargs):
     return  kwargs["original_features"] + kwargs["summed_neighbors"]
     
-DEF_USER_FUNCTIONS = [norm_user_function, user_function, upd_user_function]
+DEF_USER_FUNCTIONS = [user_function] #upd_user_function,norm_user_function
 
 class Data():
     def __init__(self, X, y, edge_index):
@@ -101,14 +105,14 @@ class SparkTune():
         return {'loss': -score, 'status': STATUS_OK}
     
     def search(self, space):
-        spark_trials = SparkTrials()
+        spark_trials = SparkTrials(parallelism = self.auto_search.parallelism)
         best_params = fmin(self.objective, space, algo=tpe.suggest, max_evals=self.auto_search.max_evals, trials=spark_trials, verbose = False)
         return best_params
 
 
 class AutoSearch:
     
-    def __init__(self, data_dict, max_evals = 200, multi_target_class = False, pred_metric= accuracy_score, pred_metric_kwargs = {}, is_transductive = True):
+    def __init__(self, data_dict, max_evals = 200, multi_target_class = False, pred_metric= accuracy_score, pred_metric_kwargs = {}, is_transductive = True, parallelism = 3):
         self.data_dict = data_dict
         self.max_evals = max_evals
         self.multi_target_class = multi_target_class
@@ -119,6 +123,7 @@ class AutoSearch:
         self.train_data:Data = None
         self.val_data:Data = None
         self.test_data:Data = None
+        self.parallelism = parallelism
 
 
     def parse_data(self):
@@ -198,5 +203,9 @@ class AutoSearch:
                             best_val = search_dict["val_acc"]
                             best_search_dict = search_dict
                             best_search_dict["attention_config"] = attention_config
+                        if hop == 0:
+                            break
+                    if hop == 0:
+                            break
                 store[clf_name][hop] = best_search_dict
         return store
