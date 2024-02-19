@@ -10,6 +10,7 @@ import matplotlib.pyplot  as plt
 from sklearn.metrics import accuracy_score
 from sklearn.manifold import TSNE
 from sklearn.inspection import PartialDependenceDisplay
+
 USER_FUNCTIONS = {
     'sum': lambda origin_features, updated_features, sum_neighbors, mul_neighbors, num_neighbors: sum_neighbors,
     'mean': lambda origin_features, updated_features, sum_neighbors, mul_neighbors, num_neighbors: sum_neighbors / num_neighbors,
@@ -23,8 +24,7 @@ def softmax(x):
     e_coef = np.exp(x)
     softmax_coef = e_coef / np.sum(e_coef)
     return softmax_coef
-## Assumption: the overall prediction perf improved when the performance of inidividual predictiors improves
-##TODO More input_validation,Docu
+
 class Framework:    
     
     def __init__(self, user_functions, 
