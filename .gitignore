@@ -1,3 +1,7 @@
 pytorch_geometric/
 graph_aware/
 sbcdata.csv
+push.sh
+data/
+pytorch_geometric/
+
