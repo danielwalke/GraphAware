@@ -10,6 +10,7 @@ import matplotlib.pyplot  as plt
 from sklearn.metrics import accuracy_score
 from sklearn.manifold import TSNE
 from sklearn.inspection import PartialDependenceDisplay
+from sklearn.inspection import permutation_importance
 
 USER_FUNCTIONS = {
     'sum': lambda origin_features, updated_features, sum_neighbors, mul_neighbors, num_neighbors: sum_neighbors,
@@ -291,43 +292,55 @@ class Framework:
             raise Exception("You need to provide two grid parameter, one for each classifier!")
         return
 
-    def score(self, X,y, sample_weight = None):
-        if self.dataset is None: raise Exception("Dataset have to be set for calculating feature importance in non-tree-based or non-linear Classifiers")
-        self.scoring_fun(y[self.dataset["test"]], self.predict(X, self.dataset["edge_index"], self.dataset["test"]), sample_weight=sample_weight)
-        
-
     def set_dataset(self, dataset):
+        ## dict with features in key "X", edge index in key "edge_index" and labels in key "y", mask under "mask"
         self.dataset = dataset
 
     def feature_importance_per_class(self, class_idx, n_repeats = 1):
         framework = self
+        dataset = self.dataset
         if self.multi_target_class:
-            is_tree_clfs = all([hasattr(framework.trained_clfs[0].estimators_[0], 'feature_importances_') for i in range(len(framework.trained_clfs))])
-            is_linear_clfs = all([hasattr(framework.trained_clfs[0].estimators_[0], 'coef_')  for i in range(len(framework.trained_clfs))])
-            if is_tree_clfs:
-                return np.mean([framework.trained_clfs[i].estimators_[class_idx].feature_importances_ for i in range(len(framework.trained_clfs))], axis = 0)
-            elif is_linear_clfs:
+            is_linear_clfs = all([hasattr(framework.trained_clfs[i].estimators_[0], 'coef_')  for i in range(len(framework.trained_clfs))])
+            if class_idx:
                 return np.mean([softmax(np.abs(framework.trained_clfs[i].estimators_[class_idx].coef_)) for i in range(len(framework.trained_clfs))], axis = 0)
-            else:
-                return permutation_importance(self, dataset["X"], dataset["y"],
-                            n_repeats=n_repeats,
-                          random_state=0)["importances_mean"]
+            return np.mean([softmax(np.abs(framework.trained_clfs[i].estimators_[:].coef_)) for i in range(len(framework.trained_clfs))], axis = 0)
         if not self.multi_target_class:
-            is_tree_clfs = all([hasattr(framework.trained_clfs[i], "feature_importances_") for i in range(len(framework.trained_clfs))])
-            is_linear_clfs = all([hasattr(framework.trained_clfs[i], "coef_") for i in range(len(framework.trained_clfs))])
-            if is_tree_clfs:
-                return np.mean([framework.trained_clfs[i].feature_importances_[class_idx] for i in range(len(framework.trained_clfs))], axis = 0)
-            elif is_linear_clfs:
+            if class_idx:
                 return np.mean([softmax(np.abs(framework.trained_clfs[i].coef_[class_idx])) for i in range(len(framework.trained_clfs))], axis = 0)
-            else:
-                return permutation_importance(self, dataset["X"], dataset["y"],
-                            n_repeats=n_repeats,
-                          random_state=0)["importances_mean"]
+            return np.mean([softmax(np.abs(framework.trained_clfs[i].coef_)) for i in range(len(framework.trained_clfs))], axis = 0)
     
-    def feature_importance(self):
+    def feature_importance(self, n_repeats = 10):
+        framework = self
         num_classes = self.num_classes if not self.multi_target_class else self.multi_out
         if not num_classes: raise Exception("Not fitted yet")
-        return np.mean([self.feature_importance_per_class(i) for i in range(num_classes)], axis = 0)
+        if self.multi_target_class:
+            is_tree_clfs = all([hasattr(framework.trained_clfs[i].estimators_[0], 'feature_importances_') for i in range(len(framework.trained_clfs))])
+            if is_tree_clfs:
+                return np.mean([np.mean([framework.trained_clfs[i].estimators_[class_idx].feature_importances_ for i in range(len(framework.trained_clfs))], axis = 0) for class_idx in range(num_classes)], axis = 0)
+            is_linear_clfs = all([hasattr(framework.trained_clfs[i].estimators_[0], 'coef_')  for i in range(len(framework.trained_clfs))])
+            if is_linear_clfs:
+                return np.mean([np.mean([softmax(np.abs(framework.trained_clfs[i].estimators_[class_idx].coef_[0])) for i in range(len(framework.trained_clfs))], axis = 0) for class_idx in range(num_classes)], axis = 0)
+            if self.dataset is None: raise Exception("Dataset have to be set for calculating feature importance in non-tree-based or non-linear Classifiers")
+            return np.mean([np.mean([permutation_importance(framework.trained_clfs[i].estimators_[class_idx], 
+                       framework.get_features(self.dataset["X"],
+                                              self.dataset["edge_index"],
+                                              self.dataset["mask"])[i].cpu(),
+                        self.dataset["y"][self.dataset["mask"]][:, class_idx],
+                        n_repeats=10,
+                        random_state=0)["importances_mean"] for class_idx in range(num_classes)], axis = 0) for i in range(len(framework.trained_clfs))], axis = 0)
+        if not self.multi_target_class:
+            is_tree_clfs = all([hasattr(framework.trained_clfs[i], "feature_importances_") for i in range(len(framework.trained_clfs))])
+            if is_tree_clfs:
+                return np.mean([framework.trained_clfs[i].feature_importances_ for i in range(len(framework.trained_clfs))], axis = 0)
+            is_linear_clfs = all([hasattr(framework.trained_clfs[i], "coef_") for i in range(len(framework.trained_clfs))])
+            if is_linear_clfs:
+                return np.mean([framework.trained_clfs[i].coef_[0] for i in range(len(framework.trained_clfs))], axis = 0)
+        if self.dataset is None: raise Exception("Dataset dict({'X':features, 'y':labels, 'edge_index':edge_index, 'mask':boolean-mask}) have to be set (set_dataset) for calculating feature importance in non-tree-based or non-linear Classifiers")
+        return np.mean([permutation_importance(framework.trained_clfs[i], framework.get_features(self.dataset["X"],
+                                              self.dataset["edge_index"],
+                                              self.dataset["mask"])[i].cpu(), self.dataset["y"][self.dataset["mask"]],
+                            n_repeats=n_repeats,
+                          random_state=0)["importances_mean"]  for i in range(len(framework.trained_clfs))], axis = 0)
 
     def plot_feature_importances(self, mark_top_n_peaks = 3, which_grid = "both", file_name = None):
         y = self.feature_importance()
@@ -348,7 +361,7 @@ class Framework:
         mask = torch.ones(X.shape[0]).type(torch.bool) if mask is None else mask
         scores = self.predict_proba(X, edge_index, mask)
         node_labels = y[mask].cpu().numpy()
-        if self.multi_target_class: raise Exception("Currently not supported for multi class prediction")
+        if self.multi_target_class or (self.num_classes == 2 and score.shape[-1] > 2): raise Exception("Currently not supported for multi class prediction")
 
         num_classes = self.num_classes         
         t_sne_embeddings = TSNE(n_components=2, perplexity=30, method='barnes_hut').fit_transform(scores)
