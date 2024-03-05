@@ -319,7 +319,7 @@ class Framework:
                 return np.mean([np.mean([framework.trained_clfs[i].estimators_[class_idx].feature_importances_ for i in range(len(framework.trained_clfs))], axis = 0) for class_idx in range(num_classes)], axis = 0)
             is_linear_clfs = all([hasattr(framework.trained_clfs[i].estimators_[0], 'coef_')  for i in range(len(framework.trained_clfs))])
             if is_linear_clfs:
-                return np.mean([np.mean([softmax(np.abs(framework.trained_clfs[i].estimators_[class_idx].coef_[0])) for i in range(len(framework.trained_clfs))], axis = 0) for class_idx in range(num_classes)], axis = 0)
+                return np.mean([softmax(np.mean([softmax(np.abs(framework.trained_clfs[i].estimators_[class_idx].coef_[0])) for i in range(len(framework.trained_clfs))], axis = 0)) for class_idx in range(num_classes)], axis = 0)
             if self.dataset is None: raise Exception("Dataset have to be set for calculating feature importance in non-tree-based or non-linear Classifiers")
             return np.mean([np.mean([permutation_importance(framework.trained_clfs[i].estimators_[class_idx], 
                        framework.get_features(self.dataset["X"],
@@ -334,7 +334,7 @@ class Framework:
                 return np.mean([framework.trained_clfs[i].feature_importances_ for i in range(len(framework.trained_clfs))], axis = 0)
             is_linear_clfs = all([hasattr(framework.trained_clfs[i], "coef_") for i in range(len(framework.trained_clfs))])
             if is_linear_clfs:
-                return np.mean([framework.trained_clfs[i].coef_[0] for i in range(len(framework.trained_clfs))], axis = 0)
+                return softmax(np.mean([framework.trained_clfs[i].coef_[0] for i in range(len(framework.trained_clfs))], axis = 0))
         if self.dataset is None: raise Exception("Dataset dict({'X':features, 'y':labels, 'edge_index':edge_index, 'mask':boolean-mask}) have to be set (set_dataset) for calculating feature importance in non-tree-based or non-linear Classifiers")
         return np.mean([permutation_importance(framework.trained_clfs[i], framework.get_features(self.dataset["X"],
                                               self.dataset["edge_index"],
@@ -342,22 +342,26 @@ class Framework:
                             n_repeats=n_repeats,
                           random_state=0)["importances_mean"]  for i in range(len(framework.trained_clfs))], axis = 0)
 
-    def plot_feature_importances(self, mark_top_n_peaks = 3, which_grid = "both", file_name = None):
+    def plot_feature_importances(self, fig_size=(30,10), mark_top_n_peaks = 3, which_grid = "both", file_name = None, dpi = 100):
         y = self.feature_importance()
         x = np.arange(y.shape[0])
         peaks_idx = y.argsort()[::-1][:mark_top_n_peaks]
-        plt.bar(x,y)
-        plt.ylabel("Relative Importance")
-        plt.xlabel("Features")
-        plt.scatter(x[peaks_idx], y[peaks_idx], c='red', marker='o')
+        fig, ax = plt.subplots(figsize=(fig_size))
+        ax.bar(x,y)
+        ax.set_ylabel("Relative Importance")
+        ax.set_xlabel("Features")
+        ax.set_xlim(0, y.shape[0])
+        ax.scatter(x[peaks_idx], y[peaks_idx], c='red', marker='o')
         for i, peak in enumerate(peaks_idx):
-            plt.annotate(f'{x[peak]:.0f}', (x[peak], y[peak]), textcoords="offset points", xytext=(0,10), ha='center')
+            ax.annotate(f'{x[peak]:.0f}', (x[peak], y[peak]), textcoords="offset points", xytext=(0,10), ha='center')
         if which_grid:
-            plt.grid(visible=True, which=which_grid)
+            ax.grid(visible=True, which=which_grid)
         plt.show()
-        if file_name: plt.savefig(f"{file_name}.png")
+        plt.draw()
+        if file_name: fig.savefig(f"{file_name}.png", dpi = dpi)
+        return plt
 
-    def plot_tsne(self, X, edge_index, y, mask = None, label_to_color_map = None):
+    def plot_tsne(self, X, edge_index, y, mask = None, label_to_color_map = None, fig_size = (12,8), dpi = 100, file_name = None):
         mask = torch.ones(X.shape[0]).type(torch.bool) if mask is None else mask
         scores = self.predict_proba(X, edge_index, mask)
         node_labels = y[mask].cpu().numpy()
@@ -365,10 +369,13 @@ class Framework:
 
         num_classes = self.num_classes         
         t_sne_embeddings = TSNE(n_components=2, perplexity=30, method='barnes_hut').fit_transform(scores)
-        
-        fig = plt.figure(figsize=(12,8), dpi=80)  # otherwise plots are really small in Jupyter Notebook
+
+        fig, ax = plt.subplots(figsize=fig_size, dpi=dpi) 
         label_to_color_map = {i: (np.random.random(), np.random.random(), np.random.random()) for i in range(num_classes)} if label_to_color_map is None else label_to_color_map
         for class_id in range(num_classes):
-            plt.scatter(t_sne_embeddings[node_labels == class_id, 0], t_sne_embeddings[node_labels == class_id, 1], s=20, color=label_to_color_map[class_id], edgecolors='black', linewidths=0.2)
-        plt.legend(label_to_color_map.keys())
+            ax.scatter(t_sne_embeddings[node_labels == class_id, 0], t_sne_embeddings[node_labels == class_id, 1], s=20, color=label_to_color_map[class_id], edgecolors='black', linewidths=0.2)
+        ax.legend(label_to_color_map.keys())
         plt.show()
+        plt.draw()
+        if file_name: fig.savefig(f"{file_name}.png", dpi = dpi)
+        return plt
