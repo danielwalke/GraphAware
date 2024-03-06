@@ -11,14 +11,32 @@ from sklearn.metrics import accuracy_score
 from sklearn.manifold import TSNE
 from sklearn.inspection import PartialDependenceDisplay
 from sklearn.inspection import permutation_importance
+from torch.nn.functional import normalize
+
+def norm_user_function(kwargs):
+    return  normalize(kwargs["original_features"] + kwargs["summed_neighbors"], p=2.0, dim = 1)
+    
+def user_function(kwargs):
+    return  kwargs["original_features"] + kwargs["summed_neighbors"]
+
+def mean_function(kwargs):
+    return  kwargs["original_features"] + kwargs["mean_neighbors"]
+
+def target_plus_mean_function(kwargs):
+    return  kwargs["original_features"] + kwargs["mean_neighbors"]
+
+def mean_function(kwargs):
+    return  kwargs["original_features"] + kwargs["mean_neighbors"]
+
+def sum_function(kwargs):
+    return  kwargs["summed_neighbors"]
 
 USER_FUNCTIONS = {
-    'sum': lambda origin_features, updated_features, sum_neighbors, mul_neighbors, num_neighbors: sum_neighbors,
-    'mean': lambda origin_features, updated_features, sum_neighbors, mul_neighbors, num_neighbors: sum_neighbors / num_neighbors,
-    'diff_of_origin_mean': lambda origin_features, updated_features, sum_neighbors, mul_neighbors, num_neighbors: origin_features - sum_neighbors / num_neighbors,
-    'diff_of_updated_mean': lambda origin_features, updated_features, sum_neighbors, mul_neighbors, num_neighbors: updated_features - sum_neighbors / num_neighbors,
-    'sum_of_origin_mean': lambda origin_features, updated_features, sum_neighbors, mul_neighbors, num_neighbors: origin_features + sum_neighbors / num_neighbors,
-    'sum_of_updated_mean': lambda origin_features, updated_features, sum_neighbors, mul_neighbors, num_neighbors: updated_features + sum_neighbors / num_neighbors,
+    'sum': sum_function,
+    'mean': mean_function,
+    'target_plus_sum': user_function,
+    'normalized_target_plus_sum': norm_user_function,
+    'target_plus_mean': target_plus_mean_function
 }
 
 def softmax(x):
@@ -50,11 +68,12 @@ class Framework:
         self.scoring_fun = scoring_fun
         self.multi_out = None
     
-    def update_user_function(self):
-        if self.user_function in USER_FUNCTIONS:
-            self.user_function = USER_FUNCTIONS[self.user_function]
+    def update_user_function(self, user_function):
+        if user_function in USER_FUNCTIONS:
+            user_function = USER_FUNCTIONS[user_function]
         else:
             raise Exception(f"Only the following string values are valid inputs for the user function: {[key for key in USER_FUNCTIONS]}. You can also specify your own function for aggregatioon.")
+        return user_function
             
     def get_features(self,
                      X:torch.FloatTensor,
@@ -63,8 +82,7 @@ class Framework:
                     is_training:bool = False) -> tuple[torch.FloatTensor, torch.FloatTensor]:
         if mask is None:
             mask = torch.ones(X.shape[0]).type(torch.bool)
-#         if isinstance(self.user_function, str):
-#             self.update_user_function()
+        
         ## To tensor
         X = Framework.get_feature_tensor(X)
         edge_index = Framework.get_edge_index_tensor(edge_index)
@@ -118,6 +136,8 @@ class Framework:
             num_source_neighbors = num_source_neighbors.unsqueeze(-1)
 
             user_function = self.user_functions[hop_idx]
+            if isinstance(user_function, str):
+                user_function = self.update_user_function(user_function)
             updated_features = features_for_aggregation ## just renaming so that the key in the user function is clear
             user_function_kwargs = {
                                 'original_features':original_features,
