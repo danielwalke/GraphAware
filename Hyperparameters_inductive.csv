@@ -1,0 +1,14 @@
+﻿Models;Protein-protein interaction network;
+GraphAware;"3 hops: { 'model': XGBClassifier(**{'objective': 'binary:logistic',  'booster':'gbtree', 'colsample_bytree': 0.9983509027864691, 'device': 'cuda:2', 'gamma': 0.05633266483318489, 'max_delta_step': 1, 'max_depth': None, 'max_leaves': None,'min_child_weight': None, 'multi_strategy': None,'n_estimators': 1400, 'n_jobs': None, 'reg_alpha': 0.06653159168960418, 'reg_lambda': 0.02308162322280471,
+ 'scale_pos_weight': 2.252702236175537,
+ 'subsample': 0.9956436486105597, 'tree_method': 'hist',
+'eta': 0.24241545316243465,'early_stopping_rounds': 10,""eval_metric"":""error""}),
+   'user_function': user_function,
+   'attention_config': {'inter_layer_normalize': False,
+    'use_pseudo_attention': True,
+    'cosine_eps': 0.01,
+    'dropout_attn': None}}";
+GCN;epochs: 2000, learning rate: 0.005, weight decay: 0, patience: 100, hidden dimension: 512, K: 2, normalization: “sym, ”dropout: 0.2;
+Cheby;epochs: 2000, learning rate: 0.005, weight decay: 0, patience: 100, hidden dimension: 512, K: 2, normalization: “sym, ”dropout: 0.2;
+GAT (paper);epochs: 1000, learning rate: 0.001, weight decay: 0.0, patience: 100, hidden dimension: 64, heads: [4, 4, 6], dropout: 0.0;
+GAT (our version);epochs: 1000, learning rate: 0.001, weight decay: 0, patience: 100, hidden dimension: 512, heads: [8, 8, 8], dropout: 0.2;

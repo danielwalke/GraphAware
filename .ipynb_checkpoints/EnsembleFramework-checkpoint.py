@@ -342,7 +342,7 @@ class Framework:
                             n_repeats=n_repeats,
                           random_state=0)["importances_mean"]  for i in range(len(framework.trained_clfs))], axis = 0)
 
-    def plot_feature_importances(self, fig_size=(30,10), mark_top_n_peaks = 3, which_grid = "both", file_name = None, dpi = 100):
+    def plot_feature_importances(self, fig_size=(30,10), mark_top_n_peaks = 3, which_grid = "both", file_name = None, dpi = 100, font_size = 16):
         y = self.feature_importance()
         x = np.arange(y.shape[0])
         peaks_idx = y.argsort()[::-1][:mark_top_n_peaks]
@@ -356,12 +356,13 @@ class Framework:
             ax.annotate(f'{x[peak]:.0f}', (x[peak], y[peak]), textcoords="offset points", xytext=(0,10), ha='center')
         if which_grid:
             ax.grid(visible=True, which=which_grid)
+        ax.tick_params(axis='both', labelsize=font_size)
         plt.show()
         plt.draw()
-        if file_name: fig.savefig(f"{file_name}.png", dpi = dpi)
+        if file_name: fig.savefig(f"{file_name}.png", dpi = dpi, bbox_inches='tight')
         return plt
 
-    def plot_tsne(self, X, edge_index, y, mask = None, label_to_color_map = None, fig_size = (12,8), dpi = 100, file_name = None):
+    def plot_tsne(self, X, edge_index, y, mask = None, label_to_color_map = None, fig_size = (12,8), dpi = 100, file_name = None, font_size = 16):
         mask = torch.ones(X.shape[0]).type(torch.bool) if mask is None else mask
         scores = self.predict_proba(X, edge_index, mask)
         node_labels = y[mask].cpu().numpy()
@@ -374,8 +375,9 @@ class Framework:
         label_to_color_map = {i: (np.random.random(), np.random.random(), np.random.random()) for i in range(num_classes)} if label_to_color_map is None else label_to_color_map
         for class_id in range(num_classes):
             ax.scatter(t_sne_embeddings[node_labels == class_id, 0], t_sne_embeddings[node_labels == class_id, 1], s=20, color=label_to_color_map[class_id], edgecolors='black', linewidths=0.2)
-        ax.legend(label_to_color_map.keys())
+        ax.legend(label_to_color_map.keys(), fontsize='large')
+        ax.tick_params(axis='both', labelsize=font_size)
         plt.show()
         plt.draw()
-        if file_name: fig.savefig(f"{file_name}.png", dpi = dpi)
+        if file_name: fig.savefig(f"{file_name}.png", dpi = dpi, bbox_inches='tight')
         return plt
