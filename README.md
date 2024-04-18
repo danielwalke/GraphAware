@@ -17,7 +17,9 @@ A framework designed to make scikit learn classifiers "graph-aware". With GraphA
 <a name="overview"/>
 
 ## Overview
+<div style="text-align: justify">
 Machine learning algorithms like XGBoost showed promising results in many applications like disease diagnosis. However, they cannot exploit the connections in graph structured data like citation networks (e.g., Cora) or protein-protein interaction networks (PPI). Although different graph learning algorithms like Graph Neural Networks (GNNs) were proposed, there is still a demand for new frameworks due to long training times and high number of trainable parameters in GNNs. We propose GraphAware, a new framework to analyze graph-structured data with machine learning algorithms. GraphAware trains separate machine learning classifiers on feature sets generated from aggregated neighborhoods of different orders and combines their outputs for the final prediction. We showed that the accuracy (Cora, CiteSeer, PubMed) or micro f1-score (PPI) for GraphAware (Cora: 0.831, CiteSeer: 0.720, PubMed: 0.802, PPI: 0.984) is higher or least comparable to the best performing GNN GAT (Cora: 0.831, CiteSeer: 0.708, PubMed: 0.790, PPI: 0.991). Furthermore, the training time required for GraphAware is much shorter (Cora: 1.09 s, CiteSeer: 2.56 s, PubMed: 1.77 s, PPI: 149.88 s) compared to GAT (Cora: 4.91 s, CiteSeer: 5.05 s, PubMed: 5.63 s, PPI: 338.72 s). GraphAware is compatible with popular python packages like sklearn and XGBoost and is open-sourced on https://github.com/danielwalke/GraphAware. 
+</div>
 
 <a name="installation"/>
 
