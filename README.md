@@ -5,13 +5,21 @@ A framework designed to make scikit learn classifiers "graph-aware". With GraphA
 ### Installation/Setup
 
 1) Clone the project
+   ```bash
    git clone https://github.com/danielwalke/GraphAware
-2) Navigate in te project
+   ```
+3) Navigate in te project
+   ```bash
    cd GraphAware/
+   ```
 4) Install requirements
+   ```bash
    pip install -r requirements.txt
-5) Import the framework
+   ```
+5) Import the framework in python or jupyter notebooks
+   ```bash
    from EnsembleFramework import Framework
+   ```
 
 ### Usage
 ### Contact
