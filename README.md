@@ -194,8 +194,9 @@ store = searcher.search(clfs, clfs_space, hops=hops_lists, user_functions= user_
                          attention_configs = attention_configs)
 ```
 10) Evaluate the search results:
+```
 print(store)
-
+```
 
 <a name="examples"/>
 
