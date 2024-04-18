@@ -35,9 +35,7 @@ A framework designed to make scikit learn classifiers "graph-aware". With GraphA
 
 <a name="usage"/>
 
-## Installation/Setup
-
-1) Clone the projec
+## Usage
 To use this tool in Python or Jupyter Notebooks you first need to import the Framework:
    ```bash
    from EnsembleFramework import Framework
