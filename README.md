@@ -8,6 +8,7 @@ A framework designed to make scikit learn classifiers "graph-aware". With GraphA
 |[Overview](#overview)     |
 |[Installation](#installation) |
 |[Usage](#usage) |
+|[Automated Hyperparameter search](#hyperparameter) |
 |[Examples](#examples) |
 |[Contact](#contact) |
 |[Fundings](#fundings)           |
@@ -92,6 +93,11 @@ y_test- labels for the test set
 from sklearn.metrics import roc_auc_score
 roc_auc_score(y_test, predict_proba[:,1])
 ```
+<a name="hyperparameter"/>
+
+## Automated Hyperparameter search
+You can defined your own hyperparameters or use the automated hyperparameter search.
+
 <a name="examples"/>
 
 ## Examples
