@@ -99,6 +99,80 @@ roc_auc_score(y_test, predict_proba[:,1])
 
 ## Automated Hyperparameter search
 You can defined your own hyperparameters or use the automated hyperparameter search.
+1) Import hyperopt, the preferred evaluation metric and your model, e.g.:
+```
+from sklearn.linear_model import LogisticRegression
+from hyperopt import hp
+from AutoTune2 import AutoSearch
+from sklearn.metrics import accuracy_score
+```
+
+2) Define the classifiers you want to evaluate:
+clfs = [LogisticRegression]
+
+3) Define the hyperparameter space, e.g.:
+- Discrete values here:
+```
+lr_choices = {
+    'penalty': ["l2"],
+    'max_iter': [2**i for i in range(6, 15)],
+    
+}
+```
+- Numeric or continous values here:
+```
+space_lr = {
+    **{key: hp.choice(key, value) for key, value in lr_choices.items()},
+    'tol': hp.loguniform('tol', -11, -3),
+    'C': hp.uniform('C', 0.0, 10)
+}
+clfs_space = dict({})
+clfs_space["LogisticRegression"] = space_lr
+```
+
+4) Define the aggregation functions you want to evaluate, e.g.: 
+```
+def mean_user_function(kwargs):
+    return  kwargs["original_features"] + kwargs["mean_neighbors"]
+    
+def sum_user_function(kwargs):
+    return  kwargs["original_features"] + kwargs["summed_neighbors"]
+
+user_functions = [mean_user_function, sum_user_function]
+```  
+
+5) Define the lists of order of neighborhoods you want to evaluate, e.g.: 
+```
+hops_lists = [[0,3,8], [0,3]]
+```
+
+6) Define the list of influence score configurations you wan tto evaluate, e.g.:
+```
+attention_configs = [None,{'inter_layer_normalize': False,
+                     'use_pseudo_attention':True,
+                     'cosine_eps':.01,
+                     'dropout_attn': None}, 
+                     {'inter_layer_normalize': True,
+                     'use_pseudo_attention':True,
+                     'cosine_eps':.01,
+                     'dropout_attn': None},
+                     {'inter_layer_normalize': True,
+                     'use_pseudo_attention':True,
+                     'cosine_eps':.001,
+                     'dropout_attn': None}]
+```
+7) Initialize the searcher
+```
+searcher = AutoSearch(name_to_sets[CORA], max_evals=500, pred_metric = accuracy_score, parallelism=50)
+```
+8) Start the search:
+```
+store = searcher.search(clfs, clfs_space, hops=hops_lists, user_functions= user_functions,
+                         attention_configs = attention_configs)
+```
+9) Evaluate the search results:
+print(store)
+
 
 <a name="examples"/>
 
