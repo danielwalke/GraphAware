@@ -46,11 +46,11 @@ Machine learning algorithms like XGBoost showed promising results in many applic
 
 ## Usage
 1) Import the Framework, import torch and import sklearn:
-   ```bash
-   from EnsembleFramework import Framework
-   import sklearn
-   import torch
-   ```
+```bash
+from EnsembleFramework import Framework
+import sklearn
+import torch
+```
 2) Define a list describing the order of neighborhoods you want to incorporate, e.g.:
 ```bash
 hops = [0, 2]
