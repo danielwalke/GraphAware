@@ -36,20 +36,8 @@ A framework designed to make scikit learn classifiers "graph-aware". With GraphA
 <a name="usage"/>
 ## Usage
 To use this tool in Python or Jupyter Notebooks you first need to import the Framework:
-```bash
+   ```bash
    from EnsembleFramework import Framework
    ```
 
-<a name="contact"/>
-## Contact
-If you have any questions, struggles with the repository, want new features or want to cooperate to hesitate to contact me: 
-daniel.walke@ovgu.de
 
-<a name="fundings"/>
-## Fundings
-We thank the German Research Foundation (DFG) for funding this study under the project ‘Optimizing graph databases focusing on data processing and integration of machine learning for large clinical and biological datasets’ [project number 463414123; grant numbers HE 8077/2-1, SA 465/53-1]).
-
-<a name="competingIntrests"/>
-
-## Competing intrests
-The authors declare that they have no competing interests.
