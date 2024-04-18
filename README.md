@@ -95,7 +95,7 @@ roc_auc_score(y_test, predict_proba[:,1])
 <a name="examples"/>
 
 ## Examples
-You can find examples for the usage under transudctive settings [here]([https://github.com/danielwalke/GraphAware/blob/main/GraphAwareEvaluation_transductive.ipynb]) and for inductive settings [here]([https://github.com/danielwalke/GraphAware/blob/main/GraphAware_Evaluation_indcutive.ipynb])
+You can find examples for the usage under transudctive settings [here](https://github.com/danielwalke/GraphAware/blob/main/GraphAwareEvaluation_transductive.ipynb) and for inductive settings [here](https://github.com/danielwalke/GraphAware/blob/main/GraphAware_Evaluation_indcutive.ipynb)
 
 
 <a name="contact"/>
