@@ -40,11 +40,56 @@ A framework designed to make scikit learn classifiers "graph-aware". With GraphA
 <a name="usage"/>
 
 ## Usage
-To use this tool in Python or Jupyter Notebooks you first need to import the Framework:
+1) Import the Framework, import torch and import sklearn:
    ```bash
    from EnsembleFramework import Framework
+   import sklearn
+   import torch
    ```
-
+2) Define a list describing the order of neighborhoods you want to incorporate, e.g.:
+```bash
+hops = [0, 2]
+```
+3) Define a aggregation function, e.g.:
+```bash
+def user_function(kwargs):
+    mean = kwargs["mean_neighbors"]
+    orignal_features = kwargs["original_features"]
+    return orignal_features - mean
+```
+4) Define a classifier that is used to analyze each order of neighborhood, e.g.:
+```bash
+clfs=[sklearn.ensemble.RandomForestClassifier(max_leaf_nodes=50, n_estimators=1000, random_state=42), sklearn.ensemble.RandomForestClassifier(max_leaf_nodes=50, n_estimators=1000, random_state=42)]
+```
+5) Optional: You can set influence score configurations if you want to weight the contributoin of individual neighbors based on their cosine similarity (use_pseudo_attention) or cut-off neighbors that are too dissimilar (cosine_eps):
+attention_configs = [{'inter_layer_normalize': True,'use_pseudo_attention':True,'cosine_eps':.01, 'dropout_attn': None} for i  in hops]
+6) Initialize the framework, e.g.:
+```bash
+framework = Framework(hops_list= hops,
+                      clfs=clfs,
+                      attention_configs=[None for i in hops],
+                      handle_nan=0.0,
+                      gpu_idx=None,
+                      user_functions=[user_function for i in hops]
+)
+```
+Note that the hops_list, clfs, attention_configs, and user_functions needs to have the same length. Detailed documentations how individual parameters have to be set can be found in EnsembleFramework.py.
+7) Fit the data, e.g.:
+X_train- features of the train set, edge_index - edge index in COO format for the train graph, y_train- labels for the train set, train_mask- boolean mask if you want to train it under transductive settings otherwise you can set it to None
+```bash
+framework.fit(X_train=features_train, edge_index=edge_index_train,y_train=labels_train, train_mask=torch.ones(features_train.shape[0]).type(torch.bool))
+```
+8) Get the final prediction probabilities:
+features_test- features of the test set, edge_index_test - edge index in COO format for the test graph, test_mask- boolean mask if you want to train it under transductive settings otherwise you can set it to None
+```bash
+predict_proba = framework.predict_proba(features_test, edge_index_test, torch.ones(features_test.shape[0]).type(torch.bool))
+```
+9) Evaluations, e.g.:
+y_test- labels for the test set
+```bash
+from sklearn.metrics import roc_auc_score
+roc_auc_score(y_test, predict_proba[:,1])
+```
 <a name="contact"/>
 
 ## Contact
