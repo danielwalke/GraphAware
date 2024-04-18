@@ -12,7 +12,11 @@ A framework designed to make scikit learn classifiers "graph-aware". With GraphA
 |[Fundings](#fundings)           |
 |[Competing intrests](#competingIntrests) |
 
+<a name="overview"/>
+
 ## Overview
+
+<a name="installation"/>
 
 ## Installation/Setup
 
