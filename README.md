@@ -33,7 +33,12 @@ A framework designed to make scikit learn classifiers "graph-aware". With GraphA
    from EnsembleFramework import Framework
    ```
 
+<a name="usage"/>
 ## Usage
+To use this tool in Python or Jupyter Notebooks you first need to import the Framework:
+```bash
+   from EnsembleFramework import Framework
+   ```
 
 <a name="contact"/>
 ## Contact
