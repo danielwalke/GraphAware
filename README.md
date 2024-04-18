@@ -1,8 +1,20 @@
-## GraphAware
+# GraphAware
 
 A framework designed to make scikit learn classifiers "graph-aware". With GraphAware, classical machine learning algorithms like logistic regression or XGBoost are able to exploit features and the graph structures similar to the popular GraphNeuralNetworks.
 
-### Installation/Setup
+## Table of Contents 
+|content                          |
+|---------------------------------|
+|[Overview](#overview)     |
+|[Installation](#installation) |
+|[Usage](#usage) |
+|[Contact](#contact) |
+|[Fundings](#fundings)           |
+|[Competing intrests](#competingIntrests) |
+
+## Overview
+
+## Installation/Setup
 
 1) Clone the project
    ```bash
@@ -21,7 +33,18 @@ A framework designed to make scikit learn classifiers "graph-aware". With GraphA
    from EnsembleFramework import Framework
    ```
 
-### Usage
-### Contact
+## Usage
+
+<a name="contact"/>
+## Contact
 If you have any questions, struggles with the repository, want new features or want to cooperate to hesitate to contact me: 
 daniel.walke@ovgu.de
+
+<a name="fundings"/>
+## Fundings
+We thank the German Research Foundation (DFG) for funding this study under the project ‘Optimizing graph databases focusing on data processing and integration of machine learning for large clinical and biological datasets’ [project number 463414123; grant numbers HE 8077/2-1, SA 465/53-1]).
+
+<a name="competingIntrests"/>
+
+## Competing intrests
+The authors declare that they have no competing interests.
