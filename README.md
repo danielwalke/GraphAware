@@ -107,10 +107,30 @@ from AutoTune2 import AutoSearch
 from sklearn.metrics import accuracy_score
 ```
 
-2) Define the classifiers you want to evaluate:
-clfs = [LogisticRegression]
+2) Define the dataset, e.g.:
+```
+from torch_geometric.datasets import Planetoid
+cora_dataset = Planetoid(root = "./data", name = "Cora")
+X =  dataset[0].x 
+y =  dataset[0].y 
 
-3) Define the hyperparameter space, e.g.:
+test =  dataset[0].test_mask
+train = dataset[0].train_mask 
+val =  dataset[0].val_mask
+
+dataset = dict({})
+dataset["X"] = X ## feature set
+dataset["y"] = y ## labels
+dataset["test"] = test  ## boolean test mask 
+dataset["train"] = train ## boolean train mask 
+dataset["val"] = val ## boolean val mask 
+dataset["edge_index"] = edge_index
+```
+3)  Define the classifiers you want to evaluate:
+```
+clfs = [LogisticRegression]
+```
+4) Define the hyperparameter space, e.g.:
 - Discrete values here:
 ```
 lr_choices = {
@@ -130,7 +150,7 @@ clfs_space = dict({})
 clfs_space["LogisticRegression"] = space_lr
 ```
 
-4) Define the aggregation functions you want to evaluate, e.g.: 
+5) Define the aggregation functions you want to evaluate, e.g.: 
 ```
 def mean_user_function(kwargs):
     return  kwargs["original_features"] + kwargs["mean_neighbors"]
@@ -141,12 +161,12 @@ def sum_user_function(kwargs):
 user_functions = [mean_user_function, sum_user_function]
 ```  
 
-5) Define the lists of order of neighborhoods you want to evaluate, e.g.: 
+6) Define the lists of order of neighborhoods you want to evaluate, e.g.: 
 ```
 hops_lists = [[0,3,8], [0,3]]
 ```
 
-6) Define the list of influence score configurations you wan tto evaluate, e.g.:
+7) Define the list of influence score configurations you wan tto evaluate, e.g.:
 ```
 attention_configs = [None,{'inter_layer_normalize': False,
                      'use_pseudo_attention':True,
@@ -161,16 +181,19 @@ attention_configs = [None,{'inter_layer_normalize': False,
                      'cosine_eps':.001,
                      'dropout_attn': None}]
 ```
-7) Initialize the searcher
+8) Initialize the searcher
+max_evals - maximum number of evaluations per classifier, aggregation list, influence score configurations, and aggregation functions provided
+pred_metric - dedired evaluation metric
+parallelism - number of parallel executions
 ```
-searcher = AutoSearch(name_to_sets[CORA], max_evals=500, pred_metric = accuracy_score, parallelism=50)
+searcher = AutoSearch(dataset, max_evals=500, pred_metric = accuracy_score, parallelism=50)
 ```
-8) Start the search:
+9) Start the search:
 ```
 store = searcher.search(clfs, clfs_space, hops=hops_lists, user_functions= user_functions,
                          attention_configs = attention_configs)
 ```
-9) Evaluate the search results:
+10) Evaluate the search results:
 print(store)
 
 
