@@ -207,7 +207,7 @@ You can find examples for the usage under transudctive settings [here](https://g
 <a name="contact"/>
 
 ## Contact
-If you have any questions, struggles with the repository, want new features or want to cooperate to hesitate to contact me: 
+If you have any questions, struggles with the repository, want new features or want to cooperate, do not hesitate to contact me: 
 daniel.walke@ovgu.de
 
 <a name="fundings"/>
