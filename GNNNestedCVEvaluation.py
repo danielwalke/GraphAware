@@ -1,15 +1,8 @@
-import  matplotlib.pyplot as plt
 from tqdm.notebook import tqdm
-from sklearn.metrics import f1_score
-from torcheval.metrics.functional import multiclass_f1_score
-import copy
 import time
 import torch 
 from NestedCV import NestedTransductiveCV
-
-TRAIN = "train"
-VAL = "val"
-TEST = "test"
+import numpy as np
 
 def train_val_masks(train_mask, manual_seed = None, train_size = 0.8):
     if manual_seed:
@@ -32,38 +25,39 @@ def train_val_masks(train_mask, manual_seed = None, train_size = 0.8):
 
 class GNNNestedCVEvaluation:
 
-    def __init__(self,device, GNN,data, epochs = 10_000,  minimize = True):
+    def __init__(self,device, GNN, data, epochs = 10_000,  minimize = True):
         self.device = device
         self.epochs = epochs
         self.GNN = GNN
-        self.loss_fn = torch.nn.BCEWithLogitsLoss(reduction='mean')
+        self.loss_fn = torch.nn.CrossEntropyLoss()
         self.training_times = []
         self.minimize = minimize
         self.PATIENCE = 10
         self.data = data
         self.nested_transd_cv = None
 
-    def nested_cross_validate(self, k_outer, k_inner, space):    
+    def nested_cross_validate(self, k_outer, k_inner, space, max_evals = 100):    
         def evaluate_fun(fitted_model, data, mask):
             with torch.inference_mode():
                 fitted_model.eval()
+                data = data.to(self.device)
                 out = fitted_model(data.x, data.edge_index)
-            check_equality = out.squeeze()[mask] == data.y[mask]
-            acc = check_equality.sum()
-            return acc
+            check_equality = out.argmax(1).squeeze()[mask] == data.y[mask]
+            acc = check_equality.sum() / mask.sum()
+            data = data.cpu()
+            return acc.item()
 
         def train_fun(data, inner_train_mask, hyperparameters):
             start = time.time()
             scores = []
-            lr = params.pop('lr', 3e-4)
-            weight_decay = params.pop('weight_decay', 3e-4)
+            lr = hyperparameters.pop('lr', 3e-4)
+            weight_decay = hyperparameters.pop('weight_decay', 3e-4)
             model = self.GNN(in_dim=data.x.shape[-1], **hyperparameters).to(self.device)
             optim = torch.optim.Adam(model.parameters(), lr = lr, weight_decay=weight_decay)
             never_breaked = True
             train_mask, val_mask = train_val_masks(inner_train_mask, 42, 0.8)
-            
-            for epoch in tqdm(range(self.epochs)):
-                data = data.to(device)
+            for epoch in range(self.epochs):
+                data = data.to(self.device)
                 optim.zero_grad()
                 model.train()
                 out = model(data.x, data.edge_index)
@@ -75,11 +69,13 @@ class GNNNestedCVEvaluation:
                 scores.append(score)
                 worst_score = float("inf") if self.minimize else float("-inf")
                 mean_score = np.mean(scores[-(self.PATIENCE + 1):]) if len(scores) > self.PATIENCE else worst_score
-                improved = score < mean_score if self.minimize else  score > mean_score
-                if epoch > (self.PATIENCE) and improved:
+                not_improved = score < mean_score if self.minimize else  score > mean_score
+                if epoch > (self.PATIENCE) and not_improved:
                     never_breaked = False
                     break
+            data = data.cpu()
             return model
-        self.nested_transd_cv = NestedTransductiveCV(self.data, k_outer, k_inner, train_fun, eval_fun,max_evals = 100, parallelism = 1, minimalize = True)
+            
+        self.nested_transd_cv = NestedTransductiveCV(self.data, k_outer, k_inner, train_fun, evaluate_fun,max_evals = max_evals, parallelism = 1, minimalize = True)
         self.nested_transd_cv.outer_cv(space)
         return self.nested_transd_cv
