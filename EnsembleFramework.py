@@ -387,14 +387,15 @@ class Framework:
             trained_clfs.append(clf)
         self.trained_clfs = trained_clfs
         return trained_clfs    
-    
+
+
     def predict_proba(self, 
                       X_test,
                       edge_index,
                       test_mask = None,
                       weights=None,
-                     kwargs_list = None):  
-         """
+                     kwargs_list = None):
+        """
         This function return prediction probabilities for the fitted classifiers
         Parameters
         ----------
@@ -437,7 +438,7 @@ class Framework:
                 test_mask=None,
                  weights=None,
                      kwargs_list = None):
-         """
+        """
         This function makes predictions with the fitted classifiers
         Parameters
         ----------
