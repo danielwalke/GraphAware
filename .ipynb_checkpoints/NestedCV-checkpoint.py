@@ -4,7 +4,9 @@ from tqdm.notebook import tqdm
 from hyperopt import fmin, tpe, hp,STATUS_OK, SparkTrials, space_eval
 import time
 import torch
-
+import logging
+from pyspark import SparkContext
+import warnings
 
 def index_to_mask(rows, index_array):
     mask_array = np.zeros(rows, dtype=int)
@@ -13,9 +15,9 @@ def index_to_mask(rows, index_array):
 
 
 class NestedCV:
-    def __init__(self, k_outer, k_inner, train_fun, eval_fun, max_evals, parallelism, minimalize):
-        self.kf_outer = StratifiedKFold(n_splits=k_outer)
-        self.kf_inner = StratifiedKFold(n_splits=k_inner)
+    def __init__(self, k_outer, k_inner, train_fun, eval_fun, max_evals, parallelism, minimalize, k_fold_class):
+        self.kf_outer = k_fold_class(n_splits=k_outer)
+        self.kf_inner = k_fold_class(n_splits=k_inner)
         self.train_fun = train_fun
         self.evaluate_fun = eval_fun
         self.outer_scores = np.zeros(k_outer)
@@ -23,24 +25,31 @@ class NestedCV:
         self.minimalize = minimalize
         self.parallelism = parallelism
         self.max_evals = max_evals
+        self.best_params_per_fold = []
+
+    def add_params(self, best_params):
+        self.best_params_per_fold.append(best_params)
 
 class NestedInductiveCV:
-    pass
-    
-class NestedTransductiveCV(NestedCV):
     def __init__(self, data, k_outer, k_inner, train_fun, eval_fun,max_evals = 100, parallelism = 1, minimalize = True):
-        self.cv_args = [k_outer, k_inner, train_fun, eval_fun,max_evals, parallelism, minimalize]
+        self.cv_args = [KFold, k_outer, k_inner, train_fun, eval_fun,max_evals, parallelism, minimalize]
         super().__init__(*self.cv_args)
         self.data = data
-        pass
-
+        
+    
+class NestedTransductiveCV(NestedCV):
+    def __init__(self, data, k_outer, k_inner, train_fun, eval_fun,max_evals = 100, parallelism = 1, minimalize = True, k_fold_class = StratifiedKFold):
+        self.cv_args = [k_outer, k_inner, train_fun, eval_fun,max_evals, parallelism, minimalize, k_fold_class]
+        super().__init__(*self.cv_args)
+        self.data = data
+        
     def outer_cv(self, space):        
         for outer_i, (train_index, test_index) in tqdm(enumerate(self.kf_outer.split(self.data.x, self.data.y))):
             inner_transd_cv = InnerTransductiveCV(train_index, outer_i, *[self.data, *self.cv_args])
-            fitted_model = inner_transd_cv.hyperparam_tuning(space)
+            fitted_model, best_params = inner_transd_cv.hyperparam_tuning(space)
+            self.add_params(best_params)
             test_mask = index_to_mask(self.data.x.shape[0], test_index)
             self.outer_scores[outer_i] = self.evaluate_fun(fitted_model, self.data, test_mask)
-            print(self.inner_scores)
         return self.outer_scores
 
 class InnerTransductiveCV(NestedTransductiveCV):
@@ -61,12 +70,18 @@ class InnerTransductiveCV(NestedTransductiveCV):
         return {'loss': score, 'status': STATUS_OK}
 
     def hyperparam_tuning(self, space):
-        print("START HYPERPARAM SEARCH")
-        print(space)
+        sc = SparkContext.getOrCreate()
+        sc.setLogLevel("OFF")
+        logging.getLogger().setLevel(logging.CRITICAL)
+        logging.getLogger('hyperopt').setLevel(logging.CRITICAL)
+        logging.getLogger('py4j').setLevel(logging.CRITICAL)
+        warnings.filterwarnings('ignore')
+        
         spark_trials = SparkTrials(parallelism = self.parallelism)
+        
         best_params = fmin(self.objective, space, algo=tpe.suggest, max_evals=self.max_evals, trials=spark_trials, verbose = False)
         best_params = space_eval(space, best_params)
+        self.add_params(best_params)
         fitted_model = self.train_fun(self.data, index_to_mask(self.data.x.shape[0], self.outer_train_index), best_params)
-        print(self.inner_scores[self.outer_i, :])
-        return fitted_model
+        return fitted_model, best_params
             

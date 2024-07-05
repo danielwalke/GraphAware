@@ -25,14 +25,14 @@ def train_val_masks(train_mask, manual_seed = None, train_size = 0.8):
 
 class GNNNestedCVEvaluation:
 
-    def __init__(self,device, GNN, data, epochs = 10_000,  minimize = True):
+    def __init__(self,device, GNN, data, epochs = 10_000,  minimize = True, PATIENCE = 100):
         self.device = device
         self.epochs = epochs
         self.GNN = GNN
         self.loss_fn = torch.nn.CrossEntropyLoss()
         self.training_times = []
         self.minimize = minimize
-        self.PATIENCE = 10
+        self.PATIENCE = PATIENCE
         self.data = data
         self.nested_transd_cv = None
 
