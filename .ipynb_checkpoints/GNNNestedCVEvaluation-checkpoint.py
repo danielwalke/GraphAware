@@ -25,7 +25,7 @@ def train_val_masks(train_mask, manual_seed = None, train_size = 0.8):
 
 class GNNNestedCVEvaluation:
 
-    def __init__(self,device, GNN, data, epochs = 10_000,  minimize = True, PATIENCE = 100):
+    def __init__(self,device, GNN, data, max_evals, epochs = 10_000,  minimize = True, PATIENCE = 100, parallelism = 1):
         self.device = device
         self.epochs = epochs
         self.GNN = GNN
@@ -35,8 +35,10 @@ class GNNNestedCVEvaluation:
         self.PATIENCE = PATIENCE
         self.data = data
         self.nested_transd_cv = None
+        self.max_evals = max_evals
+        self.parallelism = parallelism
 
-    def nested_cross_validate(self, k_outer, k_inner, space, max_evals = 100):    
+    def nested_cross_validate(self, k_outer, k_inner, space):    
         def evaluate_fun(fitted_model, data, mask):
             with torch.inference_mode():
                 fitted_model.eval()
@@ -50,9 +52,12 @@ class GNNNestedCVEvaluation:
         def train_fun(data, inner_train_mask, hyperparameters):
             start = time.time()
             scores = []
-            lr = hyperparameters.pop('lr', 3e-4)
-            weight_decay = hyperparameters.pop('weight_decay', 3e-4)
-            model = self.GNN(in_dim=data.x.shape[-1], **hyperparameters).to(self.device)
+            lr = hyperparameters['lr']
+            weight_decay = hyperparameters["weight_decay"]
+            
+            filtered_keys = list(filter(lambda key: key not in ["weight_decay", "lr"], hyperparameters.keys()))
+            model_hyperparams = {key: hyperparameters[key] for key in filtered_keys}
+            model = self.GNN(in_dim=data.x.shape[-1], **model_hyperparams).to(self.device)
             optim = torch.optim.Adam(model.parameters(), lr = lr, weight_decay=weight_decay)
             never_breaked = True
             train_mask, val_mask = train_val_masks(inner_train_mask, 42, 0.8)
@@ -76,6 +81,6 @@ class GNNNestedCVEvaluation:
             data = data.cpu()
             return model
             
-        self.nested_transd_cv = NestedTransductiveCV(self.data, k_outer, k_inner, train_fun, evaluate_fun,max_evals = max_evals, parallelism = 1, minimalize = True)
+        self.nested_transd_cv = NestedTransductiveCV(self.data, k_outer, k_inner, train_fun, evaluate_fun,max_evals = self.max_evals, parallelism = self.parallelism, minimalize = self.minimize)
         self.nested_transd_cv.outer_cv(space)
         return self.nested_transd_cv

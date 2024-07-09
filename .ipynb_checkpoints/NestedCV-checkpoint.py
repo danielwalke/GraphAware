@@ -16,8 +16,10 @@ def index_to_mask(rows, index_array):
 
 class NestedCV:
     def __init__(self, k_outer, k_inner, train_fun, eval_fun, max_evals, parallelism, minimalize, k_fold_class):
-        self.kf_outer = k_fold_class(n_splits=k_outer)
-        self.kf_inner = k_fold_class(n_splits=k_inner)
+        self.k_outer = k_outer
+        self.kf_outer = k_fold_class(n_splits=self.k_outer)
+        self.k_inner = k_inner
+        self.kf_inner = k_fold_class(n_splits=self.k_inner)
         self.train_fun = train_fun
         self.evaluate_fun = eval_fun
         self.outer_scores = np.zeros(k_outer)
@@ -26,6 +28,7 @@ class NestedCV:
         self.parallelism = parallelism
         self.max_evals = max_evals
         self.best_params_per_fold = []
+        self.best_models = []
 
     def add_params(self, best_params):
         self.best_params_per_fold.append(best_params)
@@ -45,28 +48,43 @@ class NestedTransductiveCV(NestedCV):
         
     def outer_cv(self, space):        
         for outer_i, (train_index, test_index) in tqdm(enumerate(self.kf_outer.split(self.data.x, self.data.y))):
-            inner_transd_cv = InnerTransductiveCV(train_index, outer_i, *[self.data, *self.cv_args])
-            fitted_model, best_params = inner_transd_cv.hyperparam_tuning(space)
+            inner_transd_cv = InnerTransductiveCV(train_index, *[self.data, *self.cv_args])
+            fitted_model, best_params, best_inner_scores = inner_transd_cv.hyperparam_tuning(space)
+            self.best_models.append(fitted_model)
             self.add_params(best_params)
+            self.inner_scores[outer_i, :] = best_inner_scores
             test_mask = index_to_mask(self.data.x.shape[0], test_index)
             self.outer_scores[outer_i] = self.evaluate_fun(fitted_model, self.data, test_mask)
         return self.outer_scores
 
+    def __repr__(self):
+        return f"""
+        Using a {self.k_outer} x {self.k_inner} nested {self.kf_outer.__class__.__name__} Cross-Validation, we obtain:
+        {self.outer_scores.mean():.4f} +- {self.outer_scores.std():.4f}.\n
+        self.outer_scores: {self.outer_scores}\n
+        self.best_params_per_fold: {self.best_params_per_fold}\n
+        self.best_models: {self.best_models}\n
+        """
+
 class InnerTransductiveCV(NestedTransductiveCV):
-    def __init__(self, train_index, outer_i, *args):
+    def __init__(self, train_index, *args):
         super().__init__(*args)
         self.outer_train_index = train_index
-        self.outer_i = outer_i
 
-    def objective(self, hyperparameters):    
+    def inner_fold(self, hyperparameters):
+        scores = np.zeros(self.k_inner)
         outer_train_mask = index_to_mask(self.data.x.shape[0], self.outer_train_index)
         for inner_i, (inner_train_index, inner_test_index) in enumerate(self.kf_inner.split(self.data.x[self.outer_train_index], self.data.y[self.outer_train_index])): 
             inner_train_mask = index_to_mask(self.data.x.shape[0], self.outer_train_index[inner_train_index])
             inner_test_mask = index_to_mask(self.data.x.shape[0], self.outer_train_index[inner_test_index])
             fitted_model = self.train_fun(self.data, inner_train_mask, hyperparameters)
-            self.inner_scores[self.outer_i, inner_i] = self.evaluate_fun(fitted_model, self.data, inner_test_mask)
-        
-        score = -self.inner_scores.mean() if self.minimalize else self.inner_scores.mean()    
+            
+            scores[inner_i] = self.evaluate_fun(fitted_model, self.data, inner_test_mask)
+        return scores
+
+    def objective(self, hyperparameters):    
+        scores = self.inner_fold(hyperparameters)
+        score = -scores.mean() if self.minimalize else scores.mean()    
         return {'loss': score, 'status': STATUS_OK}
 
     def hyperparam_tuning(self, space):
@@ -82,6 +100,6 @@ class InnerTransductiveCV(NestedTransductiveCV):
         best_params = fmin(self.objective, space, algo=tpe.suggest, max_evals=self.max_evals, trials=spark_trials, verbose = False)
         best_params = space_eval(space, best_params)
         self.add_params(best_params)
+        best_inner_scores = self.inner_fold(best_params)
         fitted_model = self.train_fun(self.data, index_to_mask(self.data.x.shape[0], self.outer_train_index), best_params)
-        return fitted_model, best_params
-            
+        return fitted_model, best_params, best_inner_scores
