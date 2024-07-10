@@ -33,11 +33,56 @@ class NestedCV:
     def add_params(self, best_params):
         self.best_params_per_fold.append(best_params)
 
-class NestedInductiveCV:
+class NestedInductiveCV(NestedCV):
     def __init__(self, data, k_outer, k_inner, train_fun, eval_fun,max_evals = 100, parallelism = 1, minimalize = True):
         self.cv_args = [KFold, k_outer, k_inner, train_fun, eval_fun,max_evals, parallelism, minimalize]
         super().__init__(*self.cv_args)
         self.data = data
+
+    def outer_cv(self, space):        
+        for outer_i, (train_index, test_index) in tqdm(enumerate(self.kf_outer.split(self.data))):
+            inner_indcutive_cv = InnerInductiveCV(train_index, *[self.data, *self.cv_args])
+            fitted_model, best_params, best_inner_scores = inner_indcutive_cv.hyperparam_tuning(space)
+            self.best_models.append(fitted_model)
+            self.add_params(best_params)
+            self.inner_scores[outer_i, :] = best_inner_scores
+            self.outer_scores[outer_i] = self.evaluate_fun(fitted_model, self.data[test_index])
+        return self.outer_scores
+
+class InnerInductiveCV(NestedCV):
+    def __init__(self, train_index, *args):
+        super().__init__(*args)
+        self.outer_train_index = train_index
+        self.train_data = self.data[self.outer_train_index]
+
+    def inner_fold(self, hyperparameters):
+        scores = np.zeros(self.k_inner)
+        for inner_i, (inner_train_index, inner_test_index) in enumerate(self.kf_inner.split(self.train_data)): 
+            fitted_model = self.train_fun(self.train_data[inner_train_index], hyperparameters)
+            scores[inner_i] = self.evaluate_fun(fitted_model, self.train_data[inner_test_index])
+        return scores
+
+    def objective(self, hyperparameters):    
+        scores = self.inner_fold(hyperparameters)
+        score = scores.mean() if self.minimalize else -scores.mean()    
+        return {'loss': score, 'status': STATUS_OK}
+
+    def hyperparam_tuning(self, space):
+        sc = SparkContext.getOrCreate()
+        sc.setLogLevel("OFF")
+        logging.getLogger().setLevel(logging.CRITICAL)
+        logging.getLogger('hyperopt').setLevel(logging.CRITICAL)
+        logging.getLogger('py4j').setLevel(logging.CRITICAL)
+        warnings.filterwarnings('ignore')
+        
+        spark_trials = SparkTrials(parallelism = self.parallelism)
+        
+        best_params = fmin(self.objective, space, algo=tpe.suggest, max_evals=self.max_evals, trials=spark_trials, verbose = False)
+        best_params = space_eval(space, best_params)
+        self.add_params(best_params)
+        best_inner_scores = self.inner_fold(best_params)
+        fitted_model = self.train_fun(self.train_data, best_params)
+        return fitted_model, best_params, best_inner_scores
         
     
 class NestedTransductiveCV(NestedCV):
@@ -84,7 +129,7 @@ class InnerTransductiveCV(NestedTransductiveCV):
 
     def objective(self, hyperparameters):    
         scores = self.inner_fold(hyperparameters)
-        score = -scores.mean() if self.minimalize else scores.mean()    
+        score = scores.mean() if self.minimalize else -scores.mean()    
         return {'loss': score, 'status': STATUS_OK}
 
     def hyperparam_tuning(self, space):

@@ -626,7 +626,7 @@ class Framework:
                 return np.mean([framework.trained_clfs[i].feature_importances_ for i in range(len(framework.trained_clfs))], axis = 0)
             is_linear_clfs = all([hasattr(framework.trained_clfs[i], "coef_") for i in range(len(framework.trained_clfs))])
             if is_linear_clfs:
-                return softmax(np.mean([framework.trained_clfs[i].coef_[0] for i in range(len(framework.trained_clfs))], axis = 0))
+                return softmax(np.mean([np.abs(framework.trained_clfs[i].coef_[0]) for i in range(len(framework.trained_clfs))], axis = 0))
         if self.dataset is None: raise Exception("Dataset dict({'X':features, 'y':labels, 'edge_index':edge_index, 'mask':boolean-mask}) have to be set (set_dataset) for calculating feature importance in non-tree-based or non-linear Classifiers")
         return np.mean([permutation_importance(framework.trained_clfs[i], framework.get_features(self.dataset["X"],
                                               self.dataset["edge_index"],

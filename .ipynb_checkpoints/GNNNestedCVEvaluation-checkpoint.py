@@ -25,7 +25,7 @@ def train_val_masks(train_mask, manual_seed = None, train_size = 0.8):
 
 class GNNNestedCVEvaluation:
 
-    def __init__(self,device, GNN, data, max_evals, epochs = 10_000,  minimize = True, PATIENCE = 100, parallelism = 1):
+    def __init__(self,device, GNN, data, max_evals, epochs = 10_000,  minimize = False, PATIENCE = 10, parallelism = 1):
         self.device = device
         self.epochs = epochs
         self.GNN = GNN
@@ -44,7 +44,7 @@ class GNNNestedCVEvaluation:
                 fitted_model.eval()
                 data = data.to(self.device)
                 out = fitted_model(data.x, data.edge_index)
-            check_equality = out.argmax(1).squeeze()[mask] == data.y[mask]
+            check_equality = out.argmax(1)[mask] == data.y[mask]
             acc = check_equality.sum() / mask.sum()
             data = data.cpu()
             return acc.item()
@@ -74,8 +74,10 @@ class GNNNestedCVEvaluation:
                 scores.append(score)
                 worst_score = float("inf") if self.minimize else float("-inf")
                 mean_score = np.mean(scores[-(self.PATIENCE + 1):]) if len(scores) > self.PATIENCE else worst_score
-                not_improved = score < mean_score if self.minimize else  score > mean_score
+                not_improved = score > mean_score if self.minimize else  score < mean_score
                 if epoch > (self.PATIENCE) and not_improved:
+                    print(scores)
+                    print(score)
                     never_breaked = False
                     break
             data = data.cpu()
