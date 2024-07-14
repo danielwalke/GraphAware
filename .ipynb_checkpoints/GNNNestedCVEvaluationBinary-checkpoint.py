@@ -29,7 +29,7 @@ class GNNNestedCVEvaluation:
         self.device = device
         self.epochs = epochs
         self.GNN = GNN
-        self.loss_fn = torch.nn.CrossEntropyLoss()
+        self.loss_fn = torch.nn.BCEWithLogitsLoss()
         self.training_times = []
         self.minimize = minimize
         self.PATIENCE = PATIENCE
@@ -40,13 +40,13 @@ class GNNNestedCVEvaluation:
 
     def nested_cross_validate(self, k_outer, k_inner, space):    
         def evaluate_fun(fitted_model, data, mask):
-            fitted_model = fitted_model.to(self.device)
             with torch.inference_mode():
                 fitted_model.eval()
                 data = data.to(self.device)
                 out = fitted_model(data.x, data.edge_index)
-            fitted_model = fitted_model.cpu()
-            check_equality = out.argmax(1)[mask] == data.y[mask]
+            out = torch.sigmoid(out.squeeze())
+            out = torch.round(out)
+            check_equality = out[mask] == data.y[mask]
             acc = check_equality.sum() / mask.sum()
             data = data.cpu()
             return acc.item()
@@ -64,7 +64,6 @@ class GNNNestedCVEvaluation:
             never_breaked = True
             train_mask, val_mask = train_val_masks(inner_train_mask, 42, 0.8)
             for epoch in range(self.epochs):
-                model = model.to(self.device)
                 data = data.to(self.device)
                 optim.zero_grad()
                 model.train()

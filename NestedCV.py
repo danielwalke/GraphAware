@@ -7,6 +7,7 @@ import torch
 import logging
 from pyspark import SparkContext
 import warnings
+import copy
 
 def index_to_mask(rows, index_array):
     mask_array = np.zeros(rows, dtype=int)
@@ -34,8 +35,8 @@ class NestedCV:
         self.best_params_per_fold.append(best_params)
 
 class NestedInductiveCV(NestedCV):
-    def __init__(self, data, k_outer, k_inner, train_fun, eval_fun,max_evals = 100, parallelism = 1, minimalize = True):
-        self.cv_args = [KFold, k_outer, k_inner, train_fun, eval_fun,max_evals, parallelism, minimalize]
+    def __init__(self, data, k_outer, k_inner, train_fun, eval_fun,max_evals = 100, parallelism = 1, minimalize = True, k_fold_class = KFold):
+        self.cv_args = [k_outer, k_inner, train_fun, eval_fun,max_evals, parallelism, minimalize, k_fold_class]
         super().__init__(*self.cv_args)
         self.data = data
 
@@ -43,23 +44,24 @@ class NestedInductiveCV(NestedCV):
         for outer_i, (train_index, test_index) in tqdm(enumerate(self.kf_outer.split(self.data))):
             inner_indcutive_cv = InnerInductiveCV(train_index, *[self.data, *self.cv_args])
             fitted_model, best_params, best_inner_scores = inner_indcutive_cv.hyperparam_tuning(space)
-            self.best_models.append(fitted_model)
+            # self.best_models.append(copy.deepcopy(fitted_model).cpu() if hasattr(fitted_model, "cpu") else fitted_model)
             self.add_params(best_params)
             self.inner_scores[outer_i, :] = best_inner_scores
-            self.outer_scores[outer_i] = self.evaluate_fun(fitted_model, self.data[test_index])
+            self.outer_scores[outer_i] = self.evaluate_fun(fitted_model, self.data[test_index.tolist()])
+            del fitted_model
         return self.outer_scores
 
-class InnerInductiveCV(NestedCV):
+class InnerInductiveCV(NestedInductiveCV):
     def __init__(self, train_index, *args):
         super().__init__(*args)
         self.outer_train_index = train_index
-        self.train_data = self.data[self.outer_train_index]
+        self.train_data = self.data[self.outer_train_index.tolist()]
 
     def inner_fold(self, hyperparameters):
         scores = np.zeros(self.k_inner)
         for inner_i, (inner_train_index, inner_test_index) in enumerate(self.kf_inner.split(self.train_data)): 
-            fitted_model = self.train_fun(self.train_data[inner_train_index], hyperparameters)
-            scores[inner_i] = self.evaluate_fun(fitted_model, self.train_data[inner_test_index])
+            fitted_model = self.train_fun(self.train_data[inner_train_index.tolist()], hyperparameters)
+            scores[inner_i] = self.evaluate_fun(fitted_model, self.train_data[inner_test_index.tolist()])
         return scores
 
     def objective(self, hyperparameters):    
@@ -95,7 +97,7 @@ class NestedTransductiveCV(NestedCV):
         for outer_i, (train_index, test_index) in tqdm(enumerate(self.kf_outer.split(self.data.x, self.data.y))):
             inner_transd_cv = InnerTransductiveCV(train_index, *[self.data, *self.cv_args])
             fitted_model, best_params, best_inner_scores = inner_transd_cv.hyperparam_tuning(space)
-            self.best_models.append(fitted_model)
+            # self.best_models.append(copy.deepcopy(fitted_model).cpu() if hasattr(fitted_model, "cpu") else fitted_model)
             self.add_params(best_params)
             self.inner_scores[outer_i, :] = best_inner_scores
             test_mask = index_to_mask(self.data.x.shape[0], test_index)
