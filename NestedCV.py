@@ -2,12 +2,12 @@ from sklearn.model_selection import KFold, StratifiedKFold
 import numpy as np
 from tqdm.notebook import tqdm
 from hyperopt import fmin, tpe, hp,STATUS_OK, SparkTrials, space_eval
-import time
 import torch
 import logging
 from pyspark import SparkContext
 import warnings
 import copy
+import time
 
 def index_to_mask(rows, index_array):
     mask_array = np.zeros(rows, dtype=int)
@@ -30,6 +30,7 @@ class NestedCV:
         self.max_evals = max_evals
         self.best_params_per_fold = []
         self.best_models = []
+        self.train_times = []
 
     def add_params(self, best_params):
         self.best_params_per_fold.append(best_params)
@@ -43,11 +44,12 @@ class NestedInductiveCV(NestedCV):
     def outer_cv(self, space):        
         for outer_i, (train_index, test_index) in tqdm(enumerate(self.kf_outer.split(self.data))):
             inner_indcutive_cv = InnerInductiveCV(train_index, *[self.data, *self.cv_args])
-            fitted_model, best_params, best_inner_scores = inner_indcutive_cv.hyperparam_tuning(space)
+            fitted_model, best_params, best_inner_scores, train_time = inner_indcutive_cv.hyperparam_tuning(space)
             # self.best_models.append(copy.deepcopy(fitted_model).cpu() if hasattr(fitted_model, "cpu") else fitted_model)
             self.add_params(best_params)
             self.inner_scores[outer_i, :] = best_inner_scores
             self.outer_scores[outer_i] = self.evaluate_fun(fitted_model, self.data[test_index.tolist()])
+            self.train_times.append(train_time)
             del fitted_model
         return self.outer_scores
 
@@ -83,8 +85,10 @@ class InnerInductiveCV(NestedInductiveCV):
         best_params = space_eval(space, best_params)
         self.add_params(best_params)
         best_inner_scores = self.inner_fold(best_params)
+        train_start_time = time.time()
         fitted_model = self.train_fun(self.train_data, best_params)
-        return fitted_model, best_params, best_inner_scores
+        train_time = time.time() - train_start_time
+        return fitted_model, best_params, best_inner_scores, train_time
         
     
 class NestedTransductiveCV(NestedCV):
@@ -96,8 +100,9 @@ class NestedTransductiveCV(NestedCV):
     def outer_cv(self, space):        
         for outer_i, (train_index, test_index) in tqdm(enumerate(self.kf_outer.split(self.data.x, self.data.y))):
             inner_transd_cv = InnerTransductiveCV(train_index, *[self.data, *self.cv_args])
-            fitted_model, best_params, best_inner_scores = inner_transd_cv.hyperparam_tuning(space)
+            fitted_model, best_params, best_inner_scores, train_time = inner_transd_cv.hyperparam_tuning(space)
             # self.best_models.append(copy.deepcopy(fitted_model).cpu() if hasattr(fitted_model, "cpu") else fitted_model)
+            self.train_times.append(train_time)
             self.add_params(best_params)
             self.inner_scores[outer_i, :] = best_inner_scores
             test_mask = index_to_mask(self.data.x.shape[0], test_index)
@@ -148,5 +153,7 @@ class InnerTransductiveCV(NestedTransductiveCV):
         best_params = space_eval(space, best_params)
         self.add_params(best_params)
         best_inner_scores = self.inner_fold(best_params)
+        train_start_time = time.time()
         fitted_model = self.train_fun(self.data, index_to_mask(self.data.x.shape[0], self.outer_train_index), best_params)
-        return fitted_model, best_params, best_inner_scores
+        train_time = time.time() - train_start_time
+        return fitted_model, best_params, best_inner_scores, train_time

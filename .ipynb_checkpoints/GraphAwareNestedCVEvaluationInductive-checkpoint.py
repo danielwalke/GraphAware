@@ -43,7 +43,8 @@ class GraphAwareNestedCVEvaluationInductive:
             pred_proba = fitted_model.predict_proba(data.x, data.edge_index, torch.ones(data.x.shape[0], dtype = torch.bool))
             return f1_score(data.y, np.round(pred_proba), average = "micro")
 
-        def train_fun(data, hyperparameters):    
+        def train_fun(data, hyperparameters): 
+            torch.set_float32_matmul_precision('high')
             train_data, val_data = train_val_data(data)
             train_loader = iter(DataLoader(train_data, batch_size=len(train_data)))
             train_data = next(train_loader)

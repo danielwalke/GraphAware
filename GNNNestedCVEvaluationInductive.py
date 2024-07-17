@@ -44,7 +44,6 @@ class GNNNestedCVEvaluationInductive(GNNNestedCVEvaluation):
             return f1_score(y, preds, average = "micro")
 
         def train_fun(data, hyperparameters):
-            start = time.time()
             scores = []
             lr = hyperparameters['lr']
             weight_decay = hyperparameters["weight_decay"]
@@ -52,18 +51,17 @@ class GNNNestedCVEvaluationInductive(GNNNestedCVEvaluation):
             filtered_keys = list(filter(lambda key: key not in ["weight_decay", "lr"], hyperparameters.keys()))
             model_hyperparams = {key: hyperparameters[key] for key in filtered_keys}
             model = self.GNN(in_dim=data.x.shape[-1], **model_hyperparams).to(self.device)
+            model = torch.compile(model)
             optim = torch.optim.Adam(model.parameters(), lr = lr, weight_decay=weight_decay)
             never_breaked = True
             train_data, val_data = train_val_data(data, 42, 0.8)
             train_data = [graph.to(self.device) for graph in train_data]
             for epoch in range(self.epochs):
-                acc_loss = 0
-                model = model.to(self.device)
+                # model = model.to(self.device)
                 for graph in train_data:
                     model.train()
                     out = model(graph.x, graph.edge_index)
                     loss = self.loss_fn(out, graph.y)
-                    acc_loss+=loss.item()
                     optim.zero_grad()
                     loss.backward()
                     optim.step()
