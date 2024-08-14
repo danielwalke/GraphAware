@@ -110,7 +110,8 @@ class Framework:
                  multi_target_class:bool =False,
                  gpu_idx=None,
                  handle_nan=None,
-                attention_configs=[]) -> None:
+                attention_configs=[],
+                classifier_on_device=False) -> None:
         self.user_functions = user_functions
         self.hops_list = hops_list
         self.clfs = clfs
@@ -123,6 +124,7 @@ class Framework:
         self.num_classes = None
         self.dataset = None
         self.multi_out = None
+        self.classifier_on_device = classifier_on_device
     
     def update_user_function(self, user_function):
         """
@@ -383,7 +385,10 @@ class Framework:
                 clf = MultiOutputClassifier(clf, **kwargs_multi_clf)
             kwargs = kwargs_fit_list[i] if kwargs_fit_list and len(kwargs_fit_list)>i is not None else {}
             transformed_kwargs = transform_kwargs_fit(self, kwargs, i) if transform_kwargs_fit is not None else kwargs
-            clf.fit(aggregated_train_features.cpu().numpy(), y_train,**transformed_kwargs)
+            if self.classifier_on_device:
+                clf.fit(aggregated_train_features, y_train.to(self.device),**transformed_kwargs)
+            else:
+                clf.fit(aggregated_train_features.cpu().numpy(), y_train.numpy(),**transformed_kwargs)
             trained_clfs.append(clf)
         self.trained_clfs = trained_clfs
         return trained_clfs    

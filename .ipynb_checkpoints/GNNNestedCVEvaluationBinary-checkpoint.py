@@ -63,6 +63,8 @@ class GNNNestedCVEvaluation:
             optim = torch.optim.Adam(model.parameters(), lr = lr, weight_decay=weight_decay)
             never_breaked = True
             train_mask, val_mask = train_val_masks(inner_train_mask, 42, 0.8)
+
+            start_time = time.time()
             for epoch in range(self.epochs):
                 data = data.to(self.device)
                 optim.zero_grad()
@@ -80,8 +82,9 @@ class GNNNestedCVEvaluation:
                 if epoch > (self.PATIENCE) and not_improved:
                     never_breaked = False
                     break
+            train_time = time.time() - start_time
             data = data.cpu()
-            return model
+            return model, train_time
             
         self.nested_transd_cv = NestedTransductiveCV(self.data, k_outer, k_inner, train_fun, evaluate_fun,max_evals = self.max_evals, parallelism = self.parallelism, minimalize = self.minimize)
         self.nested_transd_cv.outer_cv(space)

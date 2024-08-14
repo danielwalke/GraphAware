@@ -1,0 +1,28 @@
+Traceback (most recent call last):
+  File "/home/dwalke/git/graph_aware_ml/inductive_gcn_nohup.py", line 3, in <module>
+    from torch_geometric.nn import GCNConv, GATConv, ChebConv, SAGEConv
+  File "/home/dwalke/.local/lib/python3.10/site-packages/torch_geometric/__init__.py", line 1, in <module>
+    from ._compile import compile, is_compiling
+  File "/home/dwalke/.local/lib/python3.10/site-packages/torch_geometric/_compile.py", line 6, in <module>
+    import torch_geometric.typing
+  File "/home/dwalke/.local/lib/python3.10/site-packages/torch_geometric/typing.py", line 105, in <module>
+    import torch_sparse  # noqa
+  File "/home/dwalke/.local/lib/python3.10/site-packages/torch_sparse/__init__.py", line 40, in <module>
+    from .tensor import SparseTensor  # noqa
+  File "/home/dwalke/.local/lib/python3.10/site-packages/torch_sparse/tensor.py", line 13, in <module>
+    class SparseTensor(object):
+  File "/home/dwalke/.local/lib/python3.10/site-packages/torch/jit/_script.py", line 1375, in script
+    _compile_and_register_class(obj, _rcb, qualified_name)
+  File "/home/dwalke/.local/lib/python3.10/site-packages/torch/jit/_recursive.py", line 59, in _compile_and_register_class
+    ast = get_jit_class_def(obj, obj.__name__)
+  File "/home/dwalke/.local/lib/python3.10/site-packages/torch/jit/frontend.py", line 266, in get_jit_class_def
+    sourcelines, file_lineno, filename = get_source_lines_and_file(
+  File "/home/dwalke/.local/lib/python3.10/site-packages/torch/_sources.py", line 23, in get_source_lines_and_file
+    sourcelines, file_lineno = inspect.getsourcelines(obj)
+  File "/home/dwalke/miniconda3/lib/python3.10/inspect.py", line 1131, in getsourcelines
+    return getblock(lines[lnum:]), lnum + 1
+  File "/home/dwalke/miniconda3/lib/python3.10/inspect.py", line 1106, in getblock
+    for _token in tokens:
+  File "/home/dwalke/miniconda3/lib/python3.10/tokenize.py", line 536, in _tokenize
+    (initial == '.' and token != '.' and token != '...')):
+KeyboardInterrupt

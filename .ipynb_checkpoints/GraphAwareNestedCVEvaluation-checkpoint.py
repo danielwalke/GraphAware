@@ -34,7 +34,7 @@ def space_to_spaces(space, hops):
 
 class GraphAwareNestedCVEvaluation:
 
-    def __init__(self,device_id, model, data, minimize = True, max_evals = 100, parallelism = 1):
+    def __init__(self,device_id, model, data, minimize = False, max_evals = 100, parallelism = 1, classifier_on_device = False):
         self.device_id = device_id
         self.model = model
         self.training_times = []
@@ -43,6 +43,7 @@ class GraphAwareNestedCVEvaluation:
         self.nested_transd_cv = None
         self.max_evals = max_evals
         self.parallelism = parallelism
+        self.classifier_on_device = classifier_on_device
 
     def nested_cross_validate(self, k_outer, k_inner, space):  
 
@@ -53,7 +54,6 @@ class GraphAwareNestedCVEvaluation:
 
         def train_fun(data, inner_train_mask, hyperparameters):    
             hops = hyperparameters["hops"]
-            
             attention_config = hyperparameters["attention_config"] 
             attention_configs = [attention_config for _ in hops]
             
@@ -62,7 +62,11 @@ class GraphAwareNestedCVEvaluation:
 
             filtered_keys = list(filter(lambda key: key not in ["user_function", "hops", "attention_config"], hyperparameters.keys()))
             model_hyperparams = {key: hyperparameters[key] for key in filtered_keys}
+            if "max_iter" in model_hyperparams:
+                model_hyperparams["max_iter"] = int(model_hyperparams["max_iter"]) 
             model = self.model(**model_hyperparams)
+            if self.classifier_on_device:
+                model = model.to(torch.device(f"cuda:{self.device_id}"))
             models = [model for _ in hops]
             
             framework = Framework(user_functions=user_functions, 
@@ -70,10 +74,12 @@ class GraphAwareNestedCVEvaluation:
                              clfs=models,
                              gpu_idx=self.device_id,
                              handle_nan=0.0,
-                            attention_configs=attention_configs)
+                            attention_configs=attention_configs, classifier_on_device = self.classifier_on_device)
+            start_time = time.time()
             framework.fit(data.x, data.edge_index,
                           data.y, inner_train_mask)
-            return framework
+            train_time = time.time() - start_time 
+            return framework, train_time
             
         self.nested_transd_cv = NestedTransductiveCV(self.data, k_outer, k_inner, train_fun, evaluate_fun,max_evals = self.max_evals, parallelism = self.parallelism, minimalize = self.minimize)
         self.nested_transd_cv.outer_cv(space)

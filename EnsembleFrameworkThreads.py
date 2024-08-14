@@ -12,6 +12,21 @@ from sklearn.manifold import TSNE
 from sklearn.inspection import PartialDependenceDisplay
 from sklearn.inspection import permutation_importance
 from torch.nn.functional import normalize
+import threading
+import time
+
+class Thread(threading.Thread):
+    def __init__(self, callback, thread_pool_ids, **kwargs):
+        super(Thread,self).__init__()
+        self.callback = callback
+        self.kwargs = kwargs
+        self.thread_pool_ids = thread_pool_ids
+        self.thread_pool_ids.add(kwargs["i"])
+        
+    def run(self):
+        return_params = self.callback(**self.kwargs)
+        self.thread_pool_ids.remove(self.kwargs["i"])
+        return return_params
 
 def norm_user_function(kwargs):
     return  normalize(kwargs["original_features"] + kwargs["summed_neighbors"], p=2.0, dim = 1)
@@ -87,6 +102,10 @@ class Framework:
         'cosine_eps': 0.01, ##Float-threshold to filter out nodes with to low similarity
         'dropout_attn': None} ##Float or None - Dropout of edges for training to filter out edges 
         ]
+    classifier_on_device: Boolean
+        Optional boolean whether the classifier is already on the same device as the specified device_id (gpu_idx), e.g., when passing a PyTorch model to this framework
+    threads: Union[int, None]
+        Optional integer for specifying the number of threads
     Attributes
     ----------
     hops_list: list[int]
@@ -111,11 +130,12 @@ class Framework:
                  gpu_idx=None,
                  handle_nan=None,
                 attention_configs=[],
-                classifier_on_device=False) -> None:
+                classifier_on_device=False,
+                threads = None) -> None:
         self.user_functions = user_functions
         self.hops_list = hops_list
         self.clfs = clfs
-        self.trained_clfs = None
+        self.trained_clfs = [None for _ in range(len(hops_list))]
         self.gpu_idx = gpu_idx
         self.handle_nan = handle_nan
         self.attention_configs = attention_configs
@@ -125,6 +145,9 @@ class Framework:
         self.dataset = None
         self.multi_out = None
         self.classifier_on_device = classifier_on_device
+        self.threads = threads
+        self.aggregated_train_features_list = [None for _ in range(len(hops_list))]
+        
     
     def update_user_function(self, user_function):
         """
@@ -143,6 +166,10 @@ class Framework:
         else:
             raise Exception(f"Only the following string values are valid inputs for the user function: {[key for key in USER_FUNCTIONS]}. You can also specify your own function for aggregatioon.")
         return user_function
+
+    def aggregate_features_single_thread(self, X, edge_index, i, is_training, mask):
+        neighbor_features = self.aggregate(X, edge_index, i, is_training)
+        self.aggregated_train_features_list[i] = neighbor_features[mask]
             
     def get_features(self,
                      X,
@@ -183,12 +210,21 @@ class Framework:
         edge_index = self.shift_tensor_to_device(edge_index)
         mask = self.shift_tensor_to_device(mask)
         
-        aggregated_train_features_list = []
+        threads =[]
+        thread_pool_ids = set()
         ## Aggregate
         for hop_idx in range(len(self.hops_list)):
-            neighbor_features = self.aggregate(X, edge_index, hop_idx, is_training)
-            aggregated_train_features_list.append(neighbor_features[mask])
-        return aggregated_train_features_list
+            if self.threads is None:
+                self.aggregate_features_single_thread(X=X, edge_index=edge_index, i=hop_idx, is_training = is_training, mask = mask)
+            else:
+                while len(thread_pool_ids) >= self.threads:
+                    time.sleep(0.5)
+                thread = Thread(self.aggregate_features_single_thread, thread_pool_ids = thread_pool_ids, X=X, edge_index=edge_index, i=hop_idx, is_training = is_training, mask = mask)
+                thread.start()
+                threads.append(thread)
+        for thread in threads:
+            thread.join()
+        return self.aggregated_train_features_list
 
 
     def feature_aggregations(self, features, target, source_lift):
@@ -254,7 +290,7 @@ class Framework:
                 source_lift = self.apply_attention_mechanism(source_lift, features_for_aggregation, target,self.attention_configs[hop_idx], is_training)
 
             summed_neighbors, multiplied_neighbors, mean_neighbors, max_neighbors, min_neighbors = self.feature_aggregations(features_for_aggregation, target, source_lift)
-            summed_origin_neighbors, multiplied_origin_neighbors, mean_origin_neighbors, max_origin_neighbors, min_origin_neighbors = self.feature_aggregations(original_features, target, source_origin_lift)
+            # summed_origin_neighbors, multiplied_origin_neighbors, mean_origin_neighbors, max_origin_neighbors, min_origin_neighbors = self.feature_aggregations(original_features, target, source_origin_lift)
 
             num_source_neighbors = torch.zeros(features_for_aggregation.shape[0], dtype=torch.float, device=self.device)
             num_source_neighbors.scatter_reduce(0, target, torch.ones_like(target, dtype=torch.float, device=self.device), reduce="sum", include_self = False)
@@ -272,11 +308,11 @@ class Framework:
                                 'mean_neighbors':mean_neighbors,
                                 'max_neighbors':max_neighbors,
                                 'min_neighbors':min_neighbors,
-                                'summed_origin_neighbors':summed_origin_neighbors,
-                                'multiplied_origin_neighbors':multiplied_origin_neighbors,
-                                'mean_origin_neighbors':mean_origin_neighbors,
-                                'max_origin_neighbors':max_origin_neighbors,
-                                'min_origin_neighbors':min_origin_neighbors,
+                                # 'summed_origin_neighbors':summed_origin_neighbors,
+                                # 'multiplied_origin_neighbors':multiplied_origin_neighbors,
+                                # 'mean_origin_neighbors':mean_origin_neighbors,
+                                # 'max_origin_neighbors':max_origin_neighbors,
+                                # 'min_origin_neighbors':min_origin_neighbors,
                                 'num_source_neighbors':num_source_neighbors,
                                 'hop':hop}
             out = user_function(user_function_kwargs)
@@ -332,6 +368,19 @@ class Framework:
         normalized_scores = exp_score / target_lifted_summed_exp_score
         source_lift = normalized_scores.unsqueeze(1) * source_lift
         return source_lift
+
+    def fit_classifier_single_thread(self, i, aggregated_train_features,y_train, kwargs_multi_clf_list, kwargs_fit_list, transform_kwargs_fit):
+        clf = clone(self.clfs[i]) if not hasattr(self.clfs[i], "__sklearn_clone__") else self.clfs[i].__sklearn_clone__()
+        if self.multi_target_class:
+            kwargs_multi_clf = kwargs_multi_clf_list[i] if kwargs_multi_clf_list and len(kwargs_multi_clf_list)>i is not None else {}
+            clf = MultiOutputClassifier(clf, **kwargs_multi_clf)
+        kwargs = kwargs_fit_list[i] if kwargs_fit_list and len(kwargs_fit_list)>i is not None else {}
+        transformed_kwargs = transform_kwargs_fit(self, kwargs, i) if transform_kwargs_fit is not None else kwargs
+        if self.classifier_on_device:
+            clf.fit(aggregated_train_features, y_train.to(self.device),**transformed_kwargs)
+        else:
+            clf.fit(aggregated_train_features.cpu().numpy(), y_train.numpy(),**transformed_kwargs)
+        self.trained_clfs[i] = clf
     
     def fit(self,
             X_train,
@@ -376,23 +425,24 @@ class Framework:
         self.multi_out = y_train.shape[-1]
         
         aggregated_train_features_list = self.get_features(X_train, edge_index, train_mask, True)  
-        
-        trained_clfs = []
-        for i, aggregated_train_features in enumerate(aggregated_train_features_list):
-            clf = clone(self.clfs[i])
-            if self.multi_target_class:
-                kwargs_multi_clf = kwargs_multi_clf_list[i] if kwargs_multi_clf_list and len(kwargs_multi_clf_list)>i is not None else {}
-                clf = MultiOutputClassifier(clf, **kwargs_multi_clf)
-            kwargs = kwargs_fit_list[i] if kwargs_fit_list and len(kwargs_fit_list)>i is not None else {}
-            transformed_kwargs = transform_kwargs_fit(self, kwargs, i) if transform_kwargs_fit is not None else kwargs
-            if self.classifier_on_device:
-                clf.fit(aggregated_train_features, y_train.to(self.device),**transformed_kwargs)
-            else:
-                clf.fit(aggregated_train_features.cpu().numpy(), y_train.numpy(),**transformed_kwargs)
-            trained_clfs.append(clf)
-        self.trained_clfs = trained_clfs
-        return trained_clfs    
 
+        threads = []
+        thread_pool_ids = set()
+        for i, aggregated_train_features in enumerate(aggregated_train_features_list):
+            if self.threads is None:
+                clf = self.fit_classifier_single_thread(i, aggregated_train_features,y_train, kwargs_multi_clf_list, kwargs_fit_list, transform_kwargs_fit)
+            else:
+                while len(thread_pool_ids) >= self.threads:
+                    print(f"{len(thread_pool_ids)} threads already used.")
+                    time.sleep(0.5)
+                thread = Thread(self.fit_classifier_single_thread, thread_pool_ids = thread_pool_ids, i = i, aggregated_train_features = aggregated_train_features,y_train =y_train, kwargs_multi_clf_list = kwargs_multi_clf_list, kwargs_fit_list = kwargs_fit_list, transform_kwargs_fit = transform_kwargs_fit)
+                thread.start()
+                
+                threads.append(thread)
+        if self.threads is not None:
+            for thread in threads:
+                thread.join()
+        return self.trained_clfs   
 
     def predict_proba(self, 
                       X_test,

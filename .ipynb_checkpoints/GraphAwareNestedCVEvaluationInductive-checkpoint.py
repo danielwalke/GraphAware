@@ -24,7 +24,7 @@ def train_val_data(train_data, manual_seed = None, train_size = 0.8):
 
 class GraphAwareNestedCVEvaluationInductive:
 
-    def __init__(self,device_id, model, data, minimize = True, max_evals = 100, parallelism = 1):
+    def __init__(self,device_id, model, data, minimize = False, max_evals = 100, parallelism = 1):
         self.device_id = device_id
         self.model = model
         self.training_times = []
@@ -44,7 +44,6 @@ class GraphAwareNestedCVEvaluationInductive:
             return f1_score(data.y, np.round(pred_proba), average = "micro")
 
         def train_fun(data, hyperparameters): 
-            torch.set_float32_matmul_precision('high')
             train_data, val_data = train_val_data(data)
             train_loader = iter(DataLoader(train_data, batch_size=len(train_data)))
             train_data = next(train_loader)
@@ -55,7 +54,7 @@ class GraphAwareNestedCVEvaluationInductive:
             def transform_kwargs_fit(framework, kwargs, i):
                 mask = torch.ones(val_data.x.shape[0]).type(torch.bool)
                 val_out = framework.get_features(val_data.x, val_data.edge_index, mask, is_training = False)[0].cpu()   
-                return {"eval_set":[(val_out, val_data.y)], "verbose":False}
+                return {"eval_set":[(val_out.cpu().numpy(), val_data.y.cpu().numpy())], "verbose":False}
             
             hops = hyperparameters["hops"]
             
@@ -67,6 +66,7 @@ class GraphAwareNestedCVEvaluationInductive:
 
             filtered_keys = list(filter(lambda key: key not in ["user_function", "hops", "attention_config"], hyperparameters.keys()))
             model_hyperparams = {key: hyperparameters[key] for key in filtered_keys}
+
             model = self.model(**model_hyperparams)
             models = [model for _ in hops]
 
@@ -79,10 +79,11 @@ class GraphAwareNestedCVEvaluationInductive:
                              handle_nan=0.0,
                             attention_configs=attention_configs)
             
-                
+            start_time = time.time()
             framework.fit(train_data.x, train_data.edge_index,
                           train_data.y, torch.ones(train_data.y.shape[0], dtype = torch.bool), transform_kwargs_fit = transform_kwargs_fit)
-            return framework
+            train_time = time.time() - start_time 
+            return framework, train_time
             
         self.nested_inductive_cv = NestedInductiveCV(self.data, k_outer, k_inner, train_fun, evaluate_fun,max_evals = self.max_evals, parallelism = self.parallelism, minimalize = self.minimize)
         self.nested_inductive_cv.outer_cv(space)

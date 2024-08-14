@@ -1,0 +1,20 @@
+  warnings.warn(
+[Stage 598:>                                                        (0 + 1) / 1][Stage 598:>                                                        (0 + 1) / 1][Stage 598:>                                                        (0 + 1) / 1]                                                                                [Stage 599:>                                                        (0 + 1) / 1]/home/dwalke/.local/lib/python3.10/site-packages/transformers/utils/generic.py:441: UserWarning: torch.utils._pytree._register_pytree_node is deprecated. Please use torch.utils._pytree.register_pytree_node instead.
+  _torch_pytree._register_pytree_node(
+/home/dwalke/.local/lib/python3.10/site-packages/torch/_inductor/compile_fx.py:124: UserWarning: TensorFloat32 tensor cores for float32 matrix multiplication available but not enabled. Consider setting `torch.set_float32_matmul_precision('high')` for better performance.
+  warnings.warn(
+[Stage 599:>                                                        (0 + 1) / 1][Stage 599:>                                                        (0 + 1) / 1]                                                                                Total Trials: 120: 120 succeeded, 0 failed, 0 cancelled.
+INFO:hyperopt-spark:Total Trials: 120: 120 succeeded, 0 failed, 0 cancelled.
+Best params
+[{'add_self_loops': True, 'dropout': 0.05004305047826527, 'heads': 4.0, 'hidden_dim': 464.0, 'lr': 0.0011350500084792783, 'weight_decay': 1.5637607317587948e-07}, {'add_self_loops': False, 'dropout': 0.016818082469256743, 'heads': 4.0, 'hidden_dim': 368.0, 'lr': 0.0013613731838676855, 'weight_decay': 1.8263369582819972e-07}, {'add_self_loops': False, 'dropout': 0.020866134088176558, 'heads': 4.0, 'hidden_dim': 512.0, 'lr': 0.0012496801906421847, 'weight_decay': 1.1398449749239162e-06}, {'add_self_loops': False, 'dropout': 0.09260789734361737, 'heads': 4.0, 'hidden_dim': 432.0, 'lr': 0.0017570819402978664, 'weight_decay': 3.4701013283713493e-07}, {'add_self_loops': False, 'dropout': 0.06872366122372264, 'heads': 4.0, 'hidden_dim': 464.0, 'lr': 0.002661848758666607, 'weight_decay': 3.289115510485281e-06}]
+Outer scores
+[0.96884649 0.96990803 0.94522499 0.9624229  0.9257809 ]
+0.9544366628994201
+0.016833264413100787
+Inner scores
+0.9560953453616002
+0.020406412787868804
+Train times
+[182.86146593093872, 155.74195861816406, 141.37126445770264, 97.03826951980591, 81.58572173118591]
+131.71973605155944
+37.421702861676486
