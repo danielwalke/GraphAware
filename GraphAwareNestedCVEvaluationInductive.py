@@ -44,17 +44,18 @@ class GraphAwareNestedCVEvaluationInductive:
             return f1_score(data.y, np.round(pred_proba), average = "micro")
 
         def train_fun(data, hyperparameters): 
-            train_data, val_data = train_val_data(data)
-            train_loader = iter(DataLoader(train_data, batch_size=len(train_data)))
+            # train_data, val_data = train_val_data(data)
+            train_data = data
+            train_loader = iter(DataLoader(data, batch_size=len(train_data)))
             train_data = next(train_loader)
 
-            val_loader = iter(DataLoader(val_data, batch_size=len(val_data)))
-            val_data = next(val_loader)
+            # val_loader = iter(DataLoader(val_data, batch_size=len(val_data)))
+            # val_data = next(val_loader)
             
-            def transform_kwargs_fit(framework, kwargs, i):
-                mask = torch.ones(val_data.x.shape[0]).type(torch.bool)
-                val_out = framework.get_features(val_data.x, val_data.edge_index, mask, is_training = False)[0].cpu()   
-                return {"eval_set":[(val_out.cpu().numpy(), val_data.y.cpu().numpy())], "verbose":False}
+            # def transform_kwargs_fit(framework, kwargs, i):
+            #     mask = torch.ones(val_data.x.shape[0]).type(torch.bool)
+            #     val_out = framework.get_features(val_data.x, val_data.edge_index, mask, is_training = False)[0].cpu()   
+            #     return {"eval_set":[(val_out.cpu().numpy(), val_data.y.cpu().numpy())], "verbose":False}
             
             hops = hyperparameters["hops"]
             
@@ -81,7 +82,7 @@ class GraphAwareNestedCVEvaluationInductive:
             
             start_time = time.time()
             framework.fit(train_data.x, train_data.edge_index,
-                          train_data.y, torch.ones(train_data.y.shape[0], dtype = torch.bool), transform_kwargs_fit = transform_kwargs_fit)
+                          train_data.y, torch.ones(train_data.y.shape[0], dtype = torch.bool))#, transform_kwargs_fit = transform_kwargs_fit
             train_time = time.time() - start_time 
             return framework, train_time
             
