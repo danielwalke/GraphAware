@@ -147,7 +147,8 @@ class Framework:
     def get_features(self,
                      X,
                      edge_index:torch.LongTensor,
-                     mask:torch.BoolTensor,
+                     edge_weights:torch.FloatTensor = None,
+                     mask:torch.BoolTensor = None,
                     is_training:bool = False) -> tuple[torch.FloatTensor, torch.FloatTensor]:
         """
         This function aggregates the features to get the graph-aware feature sets, i.e., it will return a list of features with the length equal to the number
@@ -160,6 +161,8 @@ class Framework:
             Original features without aggregation
         edge_index: torch.LongTensor shape [2, Number of Edges]
             Edge index for the feature aggregation in the COO format
+        edge_weights: torch.FloatTensor with shape [Number of Edges]
+            Weights for each edge that can be used for a weighted aggregation, e.g., in the case of a weighted graph
         mask: torch.BoolTensor with shape [Number of Nodes]
             Boolean mask for only returning a subset of nodes (e.g., training nodes)
         is_training: Boolean
@@ -172,21 +175,25 @@ class Framework:
         """
         if mask is None:
             mask = torch.ones(X.shape[0]).type(torch.bool)
+        if edge_weights is None:
+            edge_weights = torch.ones(edge_index.shape[1], dtype=torch.float, device=self.device)
         
         ## To tensor
         X = Framework.get_feature_tensor(X)
         edge_index = Framework.get_edge_index_tensor(edge_index)
+        edge_weights = Framework.get_edge_weights_tensor(edge_weights)
         mask = Framework.get_mask_tensor(mask)
         
         ## To device
         X = self.shift_tensor_to_device(X)
         edge_index = self.shift_tensor_to_device(edge_index)
+        edge_weights = self.shift_tensor_to_device(edge_weights)
         mask = self.shift_tensor_to_device(mask)
         
         aggregated_train_features_list = []
         ## Aggregate
         for hop_idx in range(len(self.hops_list)):
-            neighbor_features = self.aggregate(X, edge_index, hop_idx, is_training)
+            neighbor_features = self.aggregate(X, edge_index, edge_weights, hop_idx, is_training)
             aggregated_train_features_list.append(neighbor_features[mask])
         return aggregated_train_features_list
 
@@ -222,7 +229,7 @@ class Framework:
         min_neighbors = torch.zeros_like(features, device=self.device).scatter_reduce(0, target.unsqueeze(0).repeat(features.shape[1], 1).t(), source_lift, reduce="amin", include_self = False)
         return summed_neighbors, multiplied_neighbors, mean_neighbors, max_neighbors, min_neighbors
     
-    def aggregate(self, X, edge_index,hop_idx, is_training=False): 
+    def aggregate(self, X, edge_index, edge_weights, hop_idx, is_training=False): 
         """
         This function performs the iterative feature aggregation for each hop (order of neighborhood) and aggregation function requested for the i-th index and returns the aggregated features
         Parameters
@@ -231,6 +238,8 @@ class Framework:
             Original features without aggregation
         edge_index: torch.LongTensor shape [2, Number of Edges]
             Edge index of all edges in the COO format
+        edge_weights: torch.Tensor with shape [Number of Edges] or None
+            Weights for each edge that can be used for a weighted aggregation, e.g., in the case of a weighted graph
         hop_idx: int
             Index that specifies the i for the i-th feature aggregation
         is_training: Boolean
@@ -249,10 +258,11 @@ class Framework:
             source_lift = features_for_aggregation.index_select(0, edge_index[0])
             source_origin_lift = original_features.index_select(0, edge_index[0])
             target = edge_index[1]
-            
+            edge_weights = edge_weights.unsqueeze(-1)
+
             if self.attention_configs[hop_idx] and self.attention_configs[hop_idx]["use_pseudo_attention"]:
                 source_lift = self.apply_attention_mechanism(source_lift, features_for_aggregation, target,self.attention_configs[hop_idx], is_training)
-
+            source_lift = source_lift * edge_weights
             summed_neighbors, multiplied_neighbors, mean_neighbors, max_neighbors, min_neighbors = self.feature_aggregations(features_for_aggregation, target, source_lift)
             summed_origin_neighbors, multiplied_origin_neighbors, mean_origin_neighbors, max_origin_neighbors, min_origin_neighbors = self.feature_aggregations(original_features, target, source_origin_lift)
 
@@ -336,7 +346,8 @@ class Framework:
     def fit(self,
             X_train,
             edge_index,
-            y_train,
+            edge_weights = None,
+            y_train = None,
             train_mask = None,
             kwargs_fit_list = None,
             transform_kwargs_fit = None,
@@ -350,6 +361,8 @@ class Framework:
             Original train features without aggregation
         edge_index: torch.LongTensor shape [2, Number of Edges]
             Edge index of all edges in the COO format
+        edge_weights: torch.FloatTensor with shape [Number of Edges] or None
+            Weights for each edge that can be used for a weighted aggregation, e.g., in the case of a weighted graph
         y_train: torch.LongTensor with shape [Number of Nodes, Number of Labels/tasks]
             Original train labels
         train_mask: torch.BoolTensor with shape [Number of Nodes] or None
@@ -367,15 +380,17 @@ class Framework:
         trained_clfs: list[]
             List of trained sklearn or XGBoost estimators
         """
+        assert y_train is not None, "Please provide training labels y_train for fitting the classifiers"
         if train_mask is None:
             train_mask = torch.ones(X_train.shape[0]).type(torch.bool)
+        
             
         y_train = Framework.get_label_tensor(y_train)
         y_train = y_train[train_mask]
         self.num_classes = len(y_train.unique(return_counts = True)[0])
         self.multi_out = y_train.shape[-1]
         
-        aggregated_train_features_list = self.get_features(X_train, edge_index, train_mask, True)  
+        aggregated_train_features_list = self.get_features(X_train, edge_index, edge_weights, train_mask, True)  
         
         trained_clfs = []
         for i, aggregated_train_features in enumerate(aggregated_train_features_list):
@@ -397,6 +412,7 @@ class Framework:
     def predict_proba(self, 
                       X_test,
                       edge_index,
+                      edge_weights = None,
                       test_mask = None,
                       weights=None,
                      kwargs_list = None):
@@ -408,6 +424,9 @@ class Framework:
             Original test features without aggregation
         edge_index: torch.LongTensor shape [2, Number of Edges]
             Edge index of all edges in the COO format
+        edge_weights: torch.FloatTensor with shape [Number of Edges] or None
+            Weights for each edge that can be used for a weighted aggregation
+
         test_mask: torch.BoolTensor with shape [Number of Nodes] or None
             optional boolean mask for testing
             If none all features from X_test are used
@@ -423,7 +442,7 @@ class Framework:
         """
         if test_mask is None:
             test_mask = torch.ones(X_test.shape[0]).type(torch.bool)
-        aggregated_test_features_list = self.get_features(X_test, edge_index, test_mask)
+        aggregated_test_features_list = self.get_features(X_test, edge_index, edge_weights, test_mask, is_training=False)
         
         pred_probas = []
         for i, clf in enumerate(self.trained_clfs):
@@ -440,6 +459,7 @@ class Framework:
     def predict(self,
                 X_test,
                 edge_index,
+                edge_weights = None,
                 test_mask=None,
                  weights=None,
                      kwargs_list = None):
@@ -451,6 +471,9 @@ class Framework:
             Original test features without aggregation
         edge_index: torch.LongTensor shape [2, Number of Edges]
             Edge index of all edges in the COO format
+        edge_weights: torch.FloatTensor with shape [Number of Edges] or None
+            Weights for each edge that can be used for a weighted aggregation
+
         test_mask: torch.BoolTensor with shape [Number of Nodes] or None
             optional boolean mask for testing
             If none all features from X_test are used
@@ -464,7 +487,7 @@ class Framework:
         pred_list: np.array
             Return the maximum argument of the resulting prediction probabilities
         """
-        return self.predict_proba(X_test, edge_index, test_mask, weights, kwargs_list).argmax(-1)
+        return self.predict_proba(X_test, edge_index, edge_weights,  test_mask, weights, kwargs_list).argmax(-1)
         
     @staticmethod
     def get_feature_tensor(X) :
@@ -566,6 +589,31 @@ class Framework:
                 raise Exception("Edge index must be numpy array or torch tensor")
                 return None
         return edge_index
+
+    def get_edge_weights_tensor(edge_weights):
+        """
+        Transforms numpy array in torch tensors if necessary
+        Parameters
+        ----------
+        edge_weights: torch.Tensor or numpy.array
+            edge weights for the aggregation
+        Raises
+        ----------
+        Exception
+            Raises exception if input is neither numpy array nor torch tensor
+        Returns
+        ----------
+        edge_weights: torch.Tensor
+            edge weights for the aggregation as torch tensor
+        """
+        if not torch.is_tensor(edge_weights):
+            try:
+                edge_weights =  torch.from_numpy(edge_weights).type(torch.float)
+                return edge_weights
+            except:
+                raise Exception("Edge weights must be numpy array or torch tensor")
+                return None
+        return edge_weights
     
     def shift_tensor_to_device(self,
                                t):
